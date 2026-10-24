@@ -2,10 +2,11 @@
 
 ![dsh-thinking-effort-rheostat](https://socialify.git.ci/drowsylazy/dsh-thinking-effort-rheostat/image?description=1&font=Inter&language=1&name=1&pattern=Plus&theme=Auto)
 
-**DeepSeek Harness 的思考强度滑块** —— 模仿 Claude Desktop 的推理强度控件，为每一个模型调出它的全部档位。
+**DeepSeek Harness 的思考强度滑块**<br>
+模仿 Claude Desktop 的推理强度控件，为每一个模型调出它的全部档位。
 
-[![License](https://img.shields.io/badge/license-MIT-111111)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-296%20passing-111111)](#安装)
+[![License](https://img.shields.io/badge/license-MIT-2563eb)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-296%20passing-0ea5e9)](#安装)
 
 **[安装](#安装)** &nbsp;·&nbsp; **[使用](#使用)**
 
