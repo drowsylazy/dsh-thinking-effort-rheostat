@@ -566,6 +566,28 @@ const MODEL = "agentrouter/deepseek-v4-flash";
   check("client owns a reload path through the directory", /directory\.load\(\)/.test(page));
 }
 
+// ------------------------------------------- the stranded-level cleanup
+//
+// `session/selectModel` saves every successful choice as the GLOBAL default
+// (`agent-default-model`), so a level chosen in one session becomes the
+// default for every later one. When that level stops being legal — the model
+// changed, or its ladder was narrowed — the default keeps naming it and every
+// new session starts parked on it, which reads as a frozen control.
+//
+// The session's own selection is the Client's to clear, and ONE effort-free
+// selection clears BOTH halves: the Host saves it as the new default, and a
+// default without an effort carries no dead level into the next session.
+{
+  const page = read("client.js");
+
+  check("client: a stranded level is cleared with an effort-free selection",
+    /directory\.select\(\{\s*provider: info\.provider,\s*model: info\.model\s*\}\)/.test(page));
+  check("client: a stranded level is recognised as not offered",
+    /activeOffered/.test(page));
+  check("client: the clearing selection needs no separate Host write",
+    !/action: "clearDefault"/.test(page));
+}
+
 // ------------------------------------------------------------------- results
 
 console.log(

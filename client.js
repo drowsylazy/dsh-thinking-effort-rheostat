@@ -167,6 +167,7 @@ window.__ModuleLoader__.load({
 				help: "档位由当前模型自己提供；没有档位的模型可以一键启用（推荐组合来自 models.dev，也可自定义）。档位越高，作答前投入的推理越多：更慢、思考 token 更多，复杂任务上通常更准。",
 				"effort.providerDefault": "模型默认",
 				"state.failed": "当前模型不接受这个档位，已还原上一档",
+				"state.stranded": "当前档位已不可用，请重置为模型默认",
 				"state.undeclared": "该模型没有思考档位",
 				"state.unmanageable": "，且无法在此启用",
 				"state.nonreasoning": "该模型已被声明为不支持思考",
@@ -174,6 +175,7 @@ window.__ModuleLoader__.load({
 				"act.declare": "一键启用",
 				"act.custom": "自定义…",
 				"act.revert": "撤销启用",
+				"act.reset": "重置档位",
 				"act.pending": "启用中…",
 				"act.failed": "启用失败：{detail}",
 				"cho.source": "模型",
@@ -214,6 +216,7 @@ window.__ModuleLoader__.load({
 				help: "The levels come from the model itself; models without one can be enabled with one click (the suggestion comes from models.dev, or pick a custom set). A higher level spends more reasoning before answering: slower, more thinking tokens, usually more accurate on hard tasks.",
 				"effort.providerDefault": "Provider default",
 				"state.failed": "This model does not accept that level — restored the previous one",
+				"state.stranded": "The current level is no longer available — reset it to the model default",
 				"state.undeclared": "This model has no thinking levels",
 				"state.unmanageable": " and none can be enabled here",
 				"state.nonreasoning": "This model is declared as not supporting thinking",
@@ -221,6 +224,7 @@ window.__ModuleLoader__.load({
 				"act.declare": "Enable levels",
 				"act.custom": "Customize…",
 				"act.revert": "Remove levels",
+				"act.reset": "Reset level",
 				"act.pending": "Enabling…",
 				"act.failed": "Enabling failed: {detail}",
 				"cho.source": "Model",
@@ -690,8 +694,10 @@ window.__ModuleLoader__.load({
 		 */
 		function describeEffort(state) {
 			const empty = {
-				offered: false, forced: false, ours: false, activeKnown: false, efforts: [], index: 0,
-				count: 0, display: "", isMax: false, provider: null, model: null
+				offered: false, known: false, forced: false, ours: false,
+				activeKnown: false, activeOffered: false, activeId: null,
+				efforts: [], index: 0, count: 0, display: "", isMax: false,
+				provider: null, model: null
 			};
 			if (absent(state)) return empty;
 			const current = state.current;
@@ -717,7 +723,16 @@ window.__ModuleLoader__.load({
 			const defaultEffort = absent(reasoning) ? void 0 : reasoning.defaultEffort;
 
 			const declared = Array.isArray(declaredEfforts) ? declaredEfforts : [];
-			const forced = declared.length < 2;
+			/* Whether the catalogue KNOWS this model. A model that is not in the
+			   catalogue yet (the catalogue is still loading, or the model was
+			   removed) is not a model without a ladder — it is a model whose
+			   ladder is UNKNOWN, and nothing may be concluded from it. */
+			const known = entry !== null;
+			/* A model with NO ladder at all cannot take an effort: `dsh-llm`
+			   refuses every explicit effort before provider I/O. A model with
+			   exactly ONE ladder CAN take it, so the threshold is zero — a
+			   single declared level is a real, submittable level. */
+			const forced = declared.length === 0;
 			/* A thin declared ladder falls back to the PREVIEW stops: they are a
 			   mirror of the default set, not real efforts. The control may swap
 			   in a chooser draft on top of this (`draftIds`), which is why the
@@ -748,10 +763,27 @@ window.__ModuleLoader__.load({
 			/* Match the active level; a forced ladder has no default to inherit. */
 			const activeId = absent(current.reasoningEffort) ? defaultEffort : current.reasoningEffort;
 			let index = 0;
-			if (activeId !== void 0) {
+			/* Whether the level the store holds is one this model actually offers.
+			   The two can disagree: a selection made against another model — or
+			   against an older, wider ladder — survives in the durable projection
+			   and in `agent-default-model`, and the new model does not offer it.
+			   `dsh-llm` then refuses every request with
+			   UNSUPPORTED_REASONING_EFFORT, and the control must not pretend the
+			   level is in force.
+
+			   A FORCED ladder offers nothing at all: its stops are the PREVIEW
+			   mirror, and the Host refuses every explicit effort for such a model
+			   before provider I/O. So a level that "matches" the preview is NOT
+			   offered — treating it as offered is what pinned the control to the
+			   top stop and made every press a no-op. */
+			let activeOffered = false;
+			if (activeId !== void 0 && !forced) {
 				for (let i = 0; i < efforts.length; i++) {
 					const level = efforts[i];
-					if (!absent(level) && level.id === activeId) index = i;
+					if (!absent(level) && level.id === activeId) {
+						index = i;
+						activeOffered = true;
+					}
 				}
 			} else if (forced) {
 				index = 0;
@@ -760,19 +792,34 @@ window.__ModuleLoader__.load({
 
 			/* Whether an actual level is in force. A forced ladder with nothing
 			   selected yet must not claim the lowest level is active: the provider
-			   is still deciding, and saying "Minimal" would be a small lie. */
-			const activeKnown = activeId !== void 0;
+			   is still deciding, and saying "Minimal" would be a small lie.
+
+			   A level the model does not offer is not "in force" either — it is a
+			   leftover from another model or another ladder. Claiming it would
+			   put the name of a level on the trigger that no request can carry,
+			   and would paint the control as the top tier. */
+			const activeKnown = activeId !== void 0 && activeOffered;
 			const level = efforts[index];
+			/* The retained name is a HOST fallback for the case where the model
+			   declares no ladder at all — but it also carries a level the model
+			   does not offer (the store keeps the last name it saw). Naming such
+			   a level on the trigger claims a capability the model lacks, so it
+			   is only used when no level is actually in force AND the store did
+			   not name a level either. */
+			const named = absent(current.reasoningEffort) ? void 0 : current.reasoningEffort;
 			const display = activeKnown && !absent(level) && typeof level.name === "string" &&
 				level.name.length > 0
 				? level.name
-				: (typeof state.retainedEffort === "string" ? state.retainedEffort : "");
+				: (named === void 0 && typeof state.retainedEffort === "string" ? state.retainedEffort : "");
 
 			return {
-				offered: true,
+				offered: known,
+				known,
 				forced,
 				ours,
 				activeKnown,
+				activeOffered,
+				activeId: named === void 0 ? null : named,
 				efforts,
 				index,
 				count: efforts.length,
@@ -862,9 +909,13 @@ window.__ModuleLoader__.load({
 		 *   unsupported   no route, no model, or no configuration editor
 		 *   checking      the read is in flight
 		 *
-		 * The read happens only while the rail is hosted in the menu and the
-		 * model's declared ladder is thinner than two spearable levels, so a
-		 * normal model never pays for it.
+		 * The read happens while the rail is hosted in the menu and the model's
+		 * ladder needs the Host's verdict — either because it is too thin to
+		 * choose from, or because the ladder itself is the plugin's own and can
+		 * be undone. The second case used to be missed: the read required a
+		 * THIN ladder, while the removal action appears only on a ladder the
+		 * plugin declared, so the two conditions could never hold at once and
+		 * the removal button never knew what the Host thought of it.
 		 */
 		function useDeclare(visible, info, reload) {
 			const [state, setState] = useState("checking");
@@ -876,7 +927,17 @@ window.__ModuleLoader__.load({
 			   ladder, redeclared "undeclared" only by luck of a component
 			   remount). A re-read is also more honest than the local guess. */
 			const [nonce, setNonce] = useState(0);
-			const active = visible && info.forced && info.offered;
+			/* The levels the Host says the request path accepts, or null when the
+			   Host could not read them. Null is NOT an empty list: an empty list
+			   means the model really takes no effort. */
+			const [levels, setLevels] = useState(null);
+			/* The Host owns the verdict, and it is asked whenever the panel is up
+			   and the model is KNOWN — not only when the ladder is thin. The
+			   catalogue the rail draws from can be stale (the shared catalogue
+			   short-circuits on an already-loaded value), so the Host's answer is
+			   the only trustworthy one about what is declared and what the
+			   request path will accept. */
+			const active = visible && info.known;
 			const refresh = useCallback(
 				() => (typeof reload === "function" ? reload() : Promise.resolve()),
 				[reload]
@@ -896,7 +957,22 @@ window.__ModuleLoader__.load({
 				fetch(query, { headers: { accept: "application/json" } })
 					.then((response) => (response.ok ? response.json() : Promise.reject(new Error("HTTP " + String(response.status)))))
 					.then((payload) => {
-						if (live) setState(absent(payload) || typeof payload.state !== "string" ? "unsupported" : payload.state);
+						if (!live) return;
+						if (absent(payload) || typeof payload.state !== "string") {
+							setState("unsupported");
+							return;
+						}
+						setState(payload.state);
+						/* The Host also reports the levels the REQUEST path will
+						   actually accept. `null` means "could not be read" and
+						   is NOT an empty list — nothing may be concluded from
+						   it. An empty list means the model really takes no
+						   effort, which is what makes a stored level stranded. */
+						if (Array.isArray(payload.levels)) {
+							setLevels(payload.levels.filter((id) => typeof id === "string"));
+						} else {
+							setLevels(null);
+						}
 					})
 					.catch(() => {
 						if (live) setState("unsupported");
@@ -952,9 +1028,14 @@ window.__ModuleLoader__.load({
 							   Submitting a level inside that window is exactly what
 							   produced "this provider does not support that level" with no
 							   user-visible cause, so stay busy until the directory has
-							   actually caught up. `reload` resolves this; the declared
-							   ladder then arrives through the store and the rail becomes a
-							   real slider on its own. */
+							   actually caught up.
+
+							   `reload` is the CATALOGUE reload, and it cannot be trusted
+							   to reflect the write: the shared catalogue short-circuits on
+							   an already-loaded value, so it may answer with the very
+							   ladder that was just removed. The re-read this triggers
+							   (`nonce`) asks the HOST instead, and the Host is the
+							   authority on what is declared. */
 							const next = action === "declare" ? "ours" : "undeclared";
 							const settle = () => {
 								setBusy(false);
@@ -976,6 +1057,7 @@ window.__ModuleLoader__.load({
 				state: active ? state : "idle",
 				code,
 				busy,
+				levels,
 				apply
 			};
 		}
@@ -1395,6 +1477,21 @@ window.__ModuleLoader__.load({
 				const [railWidth, setRailWidth] = useState(0);
 				const [dragging, setDragging] = useState(false);
 				const [chosen, setChosen] = useState(null);
+				/* The level this control ASKED for, by ID, and the generation of
+				   that request.
+
+				   The index is useless for this: the ladder can change under a
+				   pending request (a model switch, a new declaration), so the
+				   same index can name a different level before the request
+				   settles. The ID is what the Host stores, so it is what the
+				   answer can be compared against.
+
+				   The generation is what makes a late answer harmless: an older
+				   request settling after a newer one must not clear the newer
+				   request's optimistic position. */
+				const [pending, setPending] = useState(null);
+				const generationRef = useRef(0);
+				const pendingRef = useRef(null);
 				/* Bumped by a mid-drag cancel: the dragging flip alone may not move
 				   any park dependency (a cancel before the first optimistic push
 				   changed nothing), and a cancelled key must re-park on the store's
@@ -1412,6 +1509,70 @@ window.__ModuleLoader__.load({
 					}
 				}, [directory]);
 				const declare = useDeclare(open, info, reload);
+
+				/* ---- a level the model cannot take ----
+				   A selection outlives the ladder it was made against: it lives in
+				   the durable session projection AND in `agent-default-model`,
+				   which `session/selectModel` writes on every successful choice.
+				   So a level chosen on one model stays behind after the model
+				   changes, and the Host accepts the selection even when the model
+				   declares no ladder at all.
+
+				   The control must not sit on such a level: it is not a level the
+				   model offers, the thumb parks on the top stop (which reads as
+				   "locked at max"), and every press on it is swallowed as "the
+				   level is already selected".
+
+				   It is NOT repaired automatically. A repair here would rewrite
+				   the user's GLOBAL default as a side effect of merely opening
+				   the composer — and the store's `current` can be a perfectly
+				   valid level of a model the catalogue has not loaded yet, so the
+				   "repair" would drop a working level. The stranded level is
+				   therefore REPORTED, with one explicit action, and the user
+				   decides. The action selects the same model WITHOUT an effort,
+				   which is the only selection the Host accepts for a model
+				   without a ladder — and it clears the global default too,
+				   because the Host saves that same selection as the default. */
+				const strandedRef = useRef("");
+				const [resetting, setResetting] = useState(false);
+				useEffect(() => {
+					if (!info.known || !info.offered) {
+						strandedRef.current = "";
+						return void 0;
+					}
+					/* The model offers this level: nothing is stranded. */
+					if (info.activeOffered) {
+						strandedRef.current = "";
+						return void 0;
+					}
+					const named = info.activeId;
+					if (named === null) {
+						strandedRef.current = "";
+						return void 0;
+					}
+					strandedRef.current = String(info.provider) + "/" + String(info.model) + "/" + String(named);
+				}, [info.known, info.offered, info.activeOffered, info.activeId, info.provider, info.model]);
+
+				/* ---- the projection confirms the level ----
+				   The optimistic position is released when the STORE names the
+				   level that was asked for. That is the moment the change is
+				   durable, and it is a round trip later than the RPC answer — so
+				   the key must stay where the user put it until then, or it
+				   snaps back to the previous level and the press reads as a
+				   no-op.
+
+				   The comparison is by ID, not by index: the ladder can change
+				   under a pending request, and the same index can name a
+				   different level by the time the answer arrives. */
+				useEffect(() => {
+					const request = pendingRef.current;
+					if (request === null) return void 0;
+					if (info.activeId !== request.levelId) return void 0;
+					pendingRef.current = null;
+					setPending(null);
+					chosenRef.current = null;
+					setChosen(null);
+				}, [info.activeId, info.activeOffered, info.provider, info.model]);
 
 				/* ---- the chooser's state lives here, NOT inside the panel ----
 				   The chips draft is lifted into the control so the idle rail can
@@ -1463,6 +1624,30 @@ window.__ModuleLoader__.load({
 						.catch(() => write(DEFAULT_PREVIEW_IDS.slice()));
 				};
 
+				/* ---- the Host's answer about the ladder ----
+				   The catalogue the rail draws from can be stale — the shared
+				   catalogue short-circuits on an already-loaded value — so the
+				   Host's own list of accepted levels is the authority on what
+				   this model takes. `null` means "could not be read" and is not
+				   an empty list, so nothing is concluded from it then.
+
+				   A level that NEITHER the catalogue nor the Host offers is
+				   stranded: the session projection still names it, the request
+				   path would refuse it, and the rail would sit on a level that
+				   cannot be used. */
+				const hostLevels = declare.levels;
+				const hostOffers = (id) => hostLevels === null || hostLevels.indexOf(id) >= 0;
+				/* The catalogue's PREVIEW stops are a mirror of the default set,
+				   not levels the model takes — a forced ladder offers nothing. So
+				   a catalogue offer counts only when the model really declared
+				   that level. */
+				const catalogOffers = (id) => !info.forced && info.efforts.some((level) =>
+					!absent(level) && level.id === id);
+				const strandedId = !info.activeOffered && info.activeId !== null &&
+					!catalogOffers(info.activeId) && !hostOffers(info.activeId)
+					? info.activeId
+					: null;
+
 				/* An idle rail is the "no declared ladder" state: the stops are a
 				   preview, not a choice, because the Host refuses any explicit
 				   effort for such a model before provider I/O. While the chooser
@@ -1490,8 +1675,12 @@ window.__ModuleLoader__.load({
 				/* A declaration may narrow the rail to a SINGLE level: a draft the
 				   user is still editing, or a real one-level ladder. Both must draw
 				   — which is why the old hard `count >= 2` refuses only when there
-				   is neither a draft nor a real ladder to show. */
-				const supported = info.offered && (draftIds !== null || count >= 2);
+				   is neither a draft nor a real ladder to show.
+
+				   A real single-level ladder is drawable: the model takes that
+				   level, and hiding the control would hide the only thing the
+				   user can change about it. */
+				const supported = info.offered && (draftIds !== null || count >= 1);
 
 				/* A chooser the panel outran: if the write succeeded before the
 				   user closed it, the ladder is real now and the preview belongs
@@ -1819,41 +2008,131 @@ window.__ModuleLoader__.load({
 				   cannot gate a hook instead: it flips for these same models. */
 				if (!supported) return null;
 
+				/* ---- drop the effort, keep the model ----
+				   A selection WITHOUT an effort is the one the Host accepts for a
+				   model that takes no level, and it is also the selection that
+				   leaves no stranded level behind: the Host saves it as the
+				   global default, so the dead level leaves `agent-default-model`
+				   with it.
+
+				   It is the repair for a REMOVED declaration (the projection still
+				   names the level that no longer exists) and for a level the Host
+				   does not accept. */
+				const clearEffort = () => {
+					if (absent(directory) || typeof directory.select !== "function") return;
+					const generation = ++generationRef.current;
+					pendingRef.current = null;
+					setPending(null);
+					chosenRef.current = null;
+					setChosen(null);
+					try {
+						const result = directory.select({
+							provider: info.provider,
+							model: info.model
+						});
+						if (!absent(result) && typeof result.catch === "function") {
+							result.catch(() => void 0);
+						}
+					} catch (error) {
+						/* A refused reset leaves the level in place; the footer keeps
+						   reporting it, which is honest. */
+					}
+					void generation;
+				};
+
+				/* The repair a stranded level offers: the same model, no effort. */
+				const resetToDefault = () => {
+					clearEffort();
+				};
+
 				const commit = (next) => {
 					if (next < 0 || next > count - 1) return;
-					if (next === info.index) {
+					const level = shownEfforts[next];
+					if (absent(level)) return;
+					const levelId = level.id;
+
+					/* The store's level is only "already selected" when the model
+					   actually offers it AND it is the level in force. A selection
+					   that outlived the ladder it was made against — a different
+					   model, or a ladder that was narrowed or removed — leaves the
+					   store holding a level the model cannot take. Treating that
+					   as "already selected" swallowed the click: the control
+					   looked frozen on the very level the user was trying to
+					   leave. */
+					if (next === info.index && info.activeOffered && info.activeId === levelId) {
 						chosenRef.current = null;
 						setChosen(null);
 						return;
 					}
-					const level = shownEfforts[next];
-					if (absent(level)) return;
+
+					/* A request already in flight for the SAME level needs no
+					   second one; a request for a DIFFERENT level supersedes it,
+					   and the generation below makes the older answer harmless. */
 					chosenRef.current = next;
 					setChosen(next);
-					/* Release the optimistic position as soon as the request settles.
-					   Waiting for the store to catch up instead would leave the thumb
-					   stuck forward forever if a projection never arrives; the store's
-					   `current` is authoritative once the round trip is done. */
-					const settle = () => {
+					const generation = ++generationRef.current;
+					const request = { levelId, index: next };
+					pendingRef.current = request;
+					setPending(request);
+
+					/* The optimistic position is held until the STORE agrees, not
+					   until the RPC settles. The durable projection reaches the
+					   store a round trip LATER than the RPC answers: `selectModel`
+					   appends `model/selection` to the session and only then does
+					   the projection carry it back. Releasing on the RPC alone
+					   snapped the key back to the PREVIOUS level — which read as
+					   "the click did nothing" — and on a store holding a level the
+					   model cannot take, that previous level was the very top
+					   stop, so every press looked like a frozen control.
+
+				   The wait is bounded: a projection that never arrives (a failed
+				   write, a lost connection) must not pin the key forward forever,
+				   and a REFUSED request must give the level back at once. */
+					const release = () => {
+						if (generation !== generationRef.current) return;
+						pendingRef.current = null;
+						setPending(null);
 						chosenRef.current = null;
 						setChosen(null);
 					};
+					const timer = setTimeout(release, 5000);
+
 					let result;
 					try {
 						result = directory.select({
 							provider: info.provider,
 							model: info.model,
-							reasoningEffort: level.id
+							reasoningEffort: levelId
 						});
 					} catch (error) {
-						settle();
+						clearTimeout(timer);
+						release();
 						return;
 					}
-					if (!absent(result) && typeof result.then === "function") {
-						result.then(settle, settle);
-					} else {
-						settle();
+					if (absent(result) || typeof result.then !== "function") {
+						clearTimeout(timer);
+						release();
+						return;
 					}
+					result.then(
+						(outcome) => {
+							clearTimeout(timer);
+							/* A refusal gives the level back immediately: the store
+							   keeps the previous level and the control must show
+							   it again rather than claim a level that was never
+							   accepted. */
+							if (outcome !== null && outcome !== void 0 && outcome.ok === false) {
+								release();
+								return;
+							}
+							/* A success keeps the optimistic position until the
+							   projection confirms it — see the note above. */
+						},
+						() => {
+							clearTimeout(timer);
+							release();
+						}
+					);
 				};
 
 				const positionFor = (clientX) => {
@@ -2043,6 +2322,15 @@ window.__ModuleLoader__.load({
 				if (failed) {
 					footerClass += " te-footErr";
 					footerText = t("state.failed");
+				} else if (strandedId !== null) {
+					/* The session still names a level the Host will not accept.
+					   Repairing it silently would rewrite the user's global
+					   default as a side effect of opening the composer, so it is
+					   reported with the one action that fixes it: selecting the
+					   same model without an effort. */
+					footerClass += " te-footErr";
+					footerText = t("state.stranded");
+					footerAction = "reset";
 				} else if (idle && chooserOpen) {
 					footerText = "";
 				} else if (idle) {
@@ -2069,24 +2357,55 @@ window.__ModuleLoader__.load({
 							footerText = t("state.undeclared") + t("state.unmanageable");
 						}
 					}
-				} else if (info.ours) {
+				} else if (info.ours || declare.state === "ours") {
+					/* The Host's own verdict decides whether the removal is offered:
+					   the local `info.ours` only recognises the plugin's declaration
+					   SHAPE, while the Host also knows whether the ladder is still
+					   there. A refusal must be shown in place — swallowing it left
+					   the button looking inert, which is what a dead control looks
+					   like.
+
+					   A ladder the Host says is NOT ours removes the removal action
+					   even when the local shape matched: the catalogue can be stale,
+					   and the Host is the authority. */
+					const removable = declare.state === "ours" ||
+						(declare.state === "idle" && info.ours);
 					footerClass += " te-footNote";
 					footerText = t("state.ours");
-					footerAction = "revert";
+					footerAction = removable ? "revert" : null;
+					if (declare.code.length > 0) {
+						footerClass += " te-footErr";
+						footerText = format(t("act.failed"), { detail: t("why." + declare.code) });
+					}
 				} else {
 					footerClass += " te-footDesc";
 				}
 
 				/* The primary is the whole default path — enabling never needs
 				   the chooser now — and reverting still drops the draft first:
-				   a stale draft would describe a ladder that no longer exists. */
+				   a stale draft would describe a ladder that no longer exists.
+
+				   A REMOVAL also has to clear the session's own level: the
+				   durable projection keeps naming the level that was just
+				   removed, and the request path would then refuse every
+				   request for this model. The Host saves that effort-free
+				   selection as the global default too, so the strand leaves
+				   `agent-default-model` as well — which is what stops the NEXT
+				   session from starting on a level that no longer exists. */
 				const onFooterAction = () => {
 					if (footerAction === "enable") {
 						if (idle) oneClickEnable();
 						return;
 					}
+					if (footerAction === "reset") {
+						resetToDefault();
+						return;
+					}
 					setDraftIds(null);
-					declare.apply("revert");
+					declare.apply("revert").then((outcome) => {
+						if (outcome.ok !== true) return;
+						clearEffort();
+					}, () => {});
 				};
 				const footer = chooserOpen || (footerText.length === 0 && footerAction === null) ? null : h(
 					"div",
@@ -2100,7 +2419,11 @@ window.__ModuleLoader__.load({
 							disabled: declare.busy,
 							onClick: onFooterAction
 						},
-						declare.busy ? t("act.pending") : t(footerAction === "enable" ? "act.declare" : "act.revert")
+						declare.busy ? t("act.pending") : t(
+							footerAction === "enable" ? "act.declare"
+								: footerAction === "reset" ? "act.reset"
+									: "act.revert"
+						)
 					),
 					footerAction === "enable" ? h(
 						"button",

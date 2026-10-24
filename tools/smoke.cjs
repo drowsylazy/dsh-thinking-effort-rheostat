@@ -554,12 +554,20 @@ check('model with null `reasoning` still renders the trigger', tree !== null);
 nullModel.dispose();
 
 currentState = stateWith({
-  current: { provider: 'p', model: 'm-one' },
+  current: { provider: 'p', model: 'm-one', reasoningEffort: 'minimal' },
   groups: [{ id: 'p', models: [{ id: 'm-one', name: 'One', reasoning: { efforts: [SIX[0]] } }] }]
 });
 const oneLevel = mountControl();
-check('a single declared level is treated as no capability',
-  oneLevel.draw() !== null);
+tree = oneLevel.draw();
+/* A model with EXACTLY ONE declared level can take that level: `dsh-llm`
+   accepts any effort the adapter advertises, and one is not zero. Treating a
+   single level as "no capability" refused a level the model actually
+   supports — and the rail then hid its own level. */
+check('a single declared level names itself on the trigger',
+  chipLabel(tree).indexOf('Minimal') >= 0, chipLabel(tree));
+tree = openIt(oneLevel);
+check('a single declared level draws a real rail',
+  first(tree, 'te-thumb') !== void 0 && first(tree, 'te-railIdle') === void 0, textOf(tree));
 oneLevel.dispose();
 
 /* ------------------------------------------------------------------ *
@@ -711,6 +719,192 @@ tree = noop.draw();
 first(tree, 'te-rail').props.onPointerUp();
 check('a click on the already-selected level sends nothing',
   selectCalls.length === 0, JSON.stringify(selectCalls));
+
+/* ------------------------------------------------------------------ *
+ * The ASYNCHRONY of a selection
+ *
+ * The RPC answers BEFORE the durable projection carries the change back, so
+ * the store still holds the previous level when the answer arrives. Releasing
+ * the optimistic position on the answer snapped the key back to that previous
+ * level — which reads as "the click did nothing" — and when the previous
+ * level was the top stop, every press looked like a frozen control.
+
+ * The fixture below makes that window observable: the RPC is deferred, so the
+ * test can look at the rail while the answer is still in flight, and can
+ * publish the projection at a chosen moment.
+ * ------------------------------------------------------------------ */
+const deferred = [];
+const originalSelect = directory.select;
+/** Publish the durable projection: the store now names the selection. */
+const publish = (selection) => {
+  currentState = stateWith({
+    current: {
+      provider: selection.provider,
+      model: selection.model,
+      ...selection.reasoningEffort === void 0 ? {} : { reasoningEffort: selection.reasoningEffort }
+    },
+    groups: sixGroups,
+    retainedEffort: selection.reasoningEffort
+  });
+};
+
+/* The suite is synchronous up to this point, so the asynchronous window is
+   driven by one async function that the main chain awaits at the END. It must
+   not run while the synchronous tests are still using the plain stub, so it
+   installs its own stub when it is called. */
+const asyncSuite = async () => {
+  directory.select = function (selection) {
+    selectCalls.push(selection);
+    return new Promise((resolve) => {
+      deferred.push({ selection, resolve });
+    });
+  };
+currentState = stateWith({
+  current: { provider: 'p', model: 'm6', reasoningEffort: 'max' },
+  groups: sixGroups,
+  retainedEffort: 'max'
+});
+selectCalls.length = 0;
+deferred.length = 0;
+const async1 = mountControl();
+tree = openIt(async1);
+rail = first(tree, 'te-rail');
+rail.props.onPointerDown({
+  clientX: xAt(1, 6), pointerId: 1, currentTarget: rail, preventDefault() {}
+});
+tree = async1.draw();
+first(tree, 'te-rail').props.onPointerUp();
+tree = async1.draw();
+check('the request goes out with the chosen level',
+  selectCalls.length === 1 && selectCalls[0].reasoningEffort === 'low', JSON.stringify(selectCalls));
+/* The answer is in flight and the store still says Max. The key must stay on
+   the chosen level — this is the whole bug. */
+check('the key stays on the chosen level while the answer is in flight',
+  first(tree, 'te-thumb').props['aria-valuenow'] === 2, String(first(tree, 'te-thumb').props['aria-valuenow']));
+/* The answer arrives; the projection has not yet. */
+deferred[0].resolve({ ok: true });
+await Promise.resolve();
+tree = async1.draw();
+check('the key does not snap back when the answer arrives',
+  first(tree, 'te-thumb').props['aria-valuenow'] === 2, String(first(tree, 'te-thumb').props['aria-valuenow']));
+/* The projection lands: the store names the new level, and the optimistic
+   position is released — the rail now rests on the store's own level. */
+publish({ provider: 'p', model: 'm6', reasoningEffort: 'low' });
+tree = async1.draw();
+check('the key rests on the store level once the projection lands',
+  first(tree, 'te-thumb').props['aria-valuenow'] === 2, String(first(tree, 'te-thumb').props['aria-valuenow']));
+async1.dispose();
+
+/* --- a REFUSED answer gives the level back at once ---
+   The store keeps the previous level, so the control must show it again
+   rather than claim a level that was never accepted. */
+currentState = stateWith({
+  current: { provider: 'p', model: 'm6', reasoningEffort: 'max' },
+  groups: sixGroups,
+  retainedEffort: 'max'
+});
+selectCalls.length = 0;
+deferred.length = 0;
+const refused = mountControl();
+tree = openIt(refused);
+rail = first(tree, 'te-rail');
+rail.props.onPointerDown({
+  clientX: xAt(1, 6), pointerId: 1, currentTarget: rail, preventDefault() {}
+});
+tree = refused.draw();
+first(tree, 'te-rail').props.onPointerUp();
+tree = refused.draw();
+deferred[0].resolve({ ok: false, error: { code: 'session/model-unavailable', message: 'no' } });
+await Promise.resolve();
+tree = refused.draw();
+check('a refused selection returns the key to the store level',
+  first(tree, 'te-thumb').props['aria-valuenow'] === 6, String(first(tree, 'te-thumb').props['aria-valuenow']));
+refused.dispose();
+
+/* --- an older answer must not clear a newer choice ---
+   Two requests in flight: the first one settles late, and its settlement must
+   not release the SECOND request's optimistic position. */
+currentState = stateWith({
+  current: { provider: 'p', model: 'm6', reasoningEffort: 'max' },
+  groups: sixGroups,
+  retainedEffort: 'max'
+});
+selectCalls.length = 0;
+deferred.length = 0;
+const raced = mountControl();
+tree = openIt(raced);
+rail = first(tree, 'te-rail');
+rail.props.onPointerDown({
+  clientX: xAt(1, 6), pointerId: 1, currentTarget: rail, preventDefault() {}
+});
+tree = raced.draw();
+first(tree, 'te-rail').props.onPointerUp();
+tree = raced.draw();
+rail = first(tree, 'te-rail');
+rail.props.onPointerDown({
+  clientX: xAt(3, 6), pointerId: 1, currentTarget: rail, preventDefault() {}
+});
+tree = raced.draw();
+first(tree, 'te-rail').props.onPointerUp();
+tree = raced.draw();
+check('two requests are in flight', deferred.length === 2, String(deferred.length));
+check('the newest choice is on the rail',
+  first(tree, 'te-thumb').props['aria-valuenow'] === 4, String(first(tree, 'te-thumb').props['aria-valuenow']));
+/* The OLDER answer settles last. */
+deferred[0].resolve({ ok: true });
+await Promise.resolve();
+tree = raced.draw();
+check('a late answer does not clear the newer choice',
+  first(tree, 'te-thumb').props['aria-valuenow'] === 4, String(first(tree, 'te-thumb').props['aria-valuenow']));
+/* The newer answer settles: the choice is released to the store. */
+deferred[1].resolve({ ok: true });
+await Promise.resolve();
+publish({ provider: 'p', model: 'm6', reasoningEffort: 'high' });
+tree = raced.draw();
+check('the newer choice settles on the store level',
+  first(tree, 'te-thumb').props['aria-valuenow'] === 4, String(first(tree, 'te-thumb').props['aria-valuenow']));
+raced.dispose();
+
+/* --- an older REFUSED answer must not clear the newer choice ---
+   A refusal releases the optimistic position, so a stale refusal arriving
+   after a newer request would take the key back to the store level while the
+   newer request is still in flight — the very "the press did nothing" the
+   generation guard exists to prevent. */
+currentState = stateWith({
+  current: { provider: 'p', model: 'm6', reasoningEffort: 'max' },
+  groups: sixGroups,
+  retainedEffort: 'max'
+});
+selectCalls.length = 0;
+deferred.length = 0;
+const staleRefusal = mountControl();
+tree = openIt(staleRefusal);
+rail = first(tree, 'te-rail');
+rail.props.onPointerDown({
+  clientX: xAt(1, 6), pointerId: 1, currentTarget: rail, preventDefault() {}
+});
+tree = staleRefusal.draw();
+first(tree, 'te-rail').props.onPointerUp();
+tree = staleRefusal.draw();
+rail = first(tree, 'te-rail');
+rail.props.onPointerDown({
+  clientX: xAt(3, 6), pointerId: 1, currentTarget: rail, preventDefault() {}
+});
+tree = staleRefusal.draw();
+first(tree, 'te-rail').props.onPointerUp();
+tree = staleRefusal.draw();
+check('the newer choice is on the rail before the stale refusal',
+  first(tree, 'te-thumb').props['aria-valuenow'] === 4, String(first(tree, 'te-thumb').props['aria-valuenow']));
+deferred[0].resolve({ ok: false, error: { code: 'session/model-unavailable', message: 'no' } });
+await Promise.resolve();
+tree = staleRefusal.draw();
+check('a stale refusal does not take the key back',
+  first(tree, 'te-thumb').props['aria-valuenow'] === 4, String(first(tree, 'te-thumb').props['aria-valuenow']));
+staleRefusal.dispose();
+
+/* The deferred fixture is done; the rest of the suite uses the plain stub. */
+directory.select = originalSelect;
+};
 
 /* ------------------------------------------------------------------ *
  * Snapping
@@ -1006,6 +1200,99 @@ check('the error footer wins over the forced-ladder hint',
   textOf(first(tree, 'te-footErr')) === app.dictionary.zh['state.failed'], textOf(tree));
 
 /* ------------------------------------------------------------------ *
+ * A STRANDED level: the store holds a level the model does not offer
+ *
+ * `session/selectModel` writes the chosen level into the durable session
+ * projection AND into `agent-default-model`, and it accepts the choice even
+ * when the model declares no ladder at all. So a level chosen on one model
+ * survives the switch to another, and the control used to sit on it as if it
+ * were in force: the thumb parked on the top stop (reading as "locked at
+ * max"), and a press on that very stop was swallowed as "already selected" —
+ * which is what "I cannot switch levels at all" looks like.
+ *
+ * Whether the level is stranded is the HOST's answer (it knows what the
+ * request path accepts), so the full case lives in the async suite below,
+ * where a fake Host can answer. What is asserted here is the part that needs
+ * no Host: the rail must not present a level the model does not offer.
+ * ------------------------------------------------------------------ */
+const STRANDED = [{ id: 'p', models: [{ id: 'm-none', name: 'No Reasoning' }] }];
+currentState = stateWith({
+  current: { provider: 'p', model: 'm-none', reasoningEffort: 'max' },
+  groups: STRANDED,
+  retainedEffort: 'max'
+});
+selectCalls.length = 0;
+const stranded = mountControl();
+tree = openIt(stranded);
+tree = stranded.draw();
+/* The model offers nothing, so the preview stops are not levels and the
+   stranded one is not in force: the trigger must not name it. */
+check('a stranded level is not named as the active one',
+  chipLabel(tree).indexOf('Max') < 0, chipLabel(tree));
+check('a stranded level does not paint the control as the top tier',
+  first(tree, 'te-tierMax') === void 0, textOf(tree));
+/* It is NOT repaired behind the user's back. An automatic repair here would
+   rewrite the user's GLOBAL default as a side effect of merely opening the
+   composer — and the store's `current` can be a perfectly valid level of a
+   model whose catalogue has not loaded yet, so the "repair" would drop a
+   working level. */
+check('a stranded level is not repaired automatically',
+  selectCalls.length === 0, JSON.stringify(selectCalls));
+stranded.dispose();
+
+/* A press on the top stop of a ladder that DOES offer it stays a no-op: the
+   level is genuinely in force, so nothing is sent. This is the counterpart of
+   the case above and must not regress into "always send". */
+currentState = stateWith({
+  current: { provider: 'p', model: 'm6', reasoningEffort: 'max' },
+  groups: sixGroups,
+  retainedEffort: 'max'
+});
+selectCalls.length = 0;
+const liveMax = mountControl();
+tree = openIt(liveMax);
+rail = first(tree, 'te-rail');
+rail.props.onPointerDown({
+  clientX: RAIL_LEFT + 9999, pointerId: 1, currentTarget: rail, preventDefault() {}
+});
+liveMax.draw();
+first(liveMax.draw(), 'te-rail').props.onPointerUp();
+check('a press on the level already in force sends nothing',
+  selectCalls.length === 0, JSON.stringify(selectCalls));
+liveMax.dispose();
+
+/* ------------------------------------------------------------------ *
+ * A model that declares five levels: the removal action must know what
+ * the Host thinks
+ *
+ * The removal button appears only on a ladder the plugin declared, while the
+ * Host's verdict — the only source that knows whether the ladder is still
+ * there and still the plugin's — used to be read only for a ladder too THIN
+ * to choose from. The two conditions could never hold at once, so the
+ * button never knew what the Host thought of it.
+ *
+ * The Host is consulted in the async suite below, where a fake Host can
+ * answer; without one there is no verdict to act on, and offering a removal
+ * nobody confirmed would be a lie.
+ * ------------------------------------------------------------------ */
+currentState = stateWith({
+  current: { provider: 'p', model: 'm6', reasoningEffort: 'high' },
+  groups: sixGroups,
+  retainedEffort: 'high'
+});
+const owned = mountControl();
+tree = openIt(owned);
+tree = owned.draw();
+/* A ladder with a per-level description is somebody else's declaration —
+   the shape the plugin does NOT own — so it must not offer the removal
+   action. The plugin's own shape (no description, no default) is the case
+   the async suite covers. */
+check('a foreign ladder (with descriptions) offers no removal action',
+  first(tree, 'te-act') === void 0 || textOf(first(tree, 'te-act')) !== app.dictionary.zh['act.revert'],
+  textOf(tree));
+owned.dispose();
+
+/* ------------------------------------------------------------------ *
  * Declaring a ladder: the Host round trip
  *
  * The browser half talks to `bundle/index.js` over one Fetch route, so a fake
@@ -1015,6 +1302,10 @@ const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 let hostState = 'undeclared';
 let hostCode = null;
+/* The levels the fake Host says the request path accepts, or null for "could
+   not be read". The real Host answers this from the live adapter, and it is
+   the authority on what a model takes. */
+let hostLevels = null;
 const hostCalls = [];
 /* One models.dev answer, deep-copied per request so a prefill cannot mutate it.
    TWO rows on purpose: the same model is listed by many providers with
@@ -1051,7 +1342,10 @@ globalThis.fetch = (input, init) => {
     return Promise.resolve({ ok: false, json: () => Promise.resolve({ ok: false, code: hostCode }) });
   }
   if (method === 'GET') {
-    return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, state: hostState }) });
+    return Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve({ ok: true, state: hostState, levels: hostLevels })
+    });
   }
   hostState = body.action === 'declare' ? 'ours' : 'undeclared';
   return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, state: hostState }) });
@@ -1062,10 +1356,23 @@ const declaredGroups = [{ id: 'p', models: [{ id: 'm-none', name: 'No Reasoning'
   efforts: [{ id: 'low', name: 'Low' }, { id: 'medium', name: 'Medium' }, { id: 'high', name: 'High' }]
 } }] }];
 
-const declareSuite = (async () => {
+/* A ladder as the Host publishes it for a model THIS plugin declared:
+   `reasoningInfo` in `dsh-llm-pi-ai` synthesizes exactly `{ id, name }` — no
+   per-level description and no default. That shape is the plugin's contract,
+   so the removal action must appear on it. */
+const OWNED_SHAPE = [{ id: 'p', models: [{ id: 'm-owned', name: 'Owned', reasoning: {
+  efforts: [
+    { id: 'low', name: 'Low' }, { id: 'medium', name: 'Medium' }, { id: 'high', name: 'High' },
+    { id: 'xhigh', name: 'Xhigh' }, { id: 'max', name: 'Max' }
+  ]
+} }] }];
+
+const declareSuite = async () => {
   /* --- undeclared: the panel offers the one-click enable --- */
   hostState = 'undeclared';
   hostCode = null;
+  hostLevels = null;
+  hostCalls.length = 0;
   currentState = stateWith({ current: { provider: 'p', model: 'm-none' }, groups: NO_LADDER });
   const live = mountControl();
   tree = openIt(live);
@@ -1104,6 +1411,7 @@ const declareSuite = (async () => {
 
   /* --- after the Host publishes the new ladder --- */
   currentState = stateWith({ current: { provider: 'p', model: 'm-none' }, groups: declaredGroups });
+  await flush();
   tree = live.draw();
   check('a declared ladder turns the rail live again',
     first(tree, 'te-railIdle') === void 0 && first(tree, 'te-thumb') !== void 0);
@@ -1111,7 +1419,8 @@ const declareSuite = (async () => {
     textOf(first(tree, 'te-footNote')).indexOf(app.dictionary.zh['state.ours']) === 0,
     textOf(first(tree, 'te-footNote')));
   check('a declared ladder offers the removal action',
-    first(tree, 'te-act') !== void 0 && textOf(first(tree, 'te-act')) === app.dictionary.zh['act.revert']);
+    first(tree, 'te-act') !== void 0 && textOf(first(tree, 'te-act')) === app.dictionary.zh['act.revert'],
+    textOf(tree));
 
   /* --- remove the enablement --- */
   first(tree, 'te-act').props.onClick();
@@ -1278,6 +1587,149 @@ const declareSuite = (async () => {
     first(tree, 'te-footErr') === void 0, textOf(tree));
   hostCode = null;
 
+  /* --- a refused REMOVAL on a ladder the plugin declared ---
+     The removal button used to be rendered without ever showing what the Host
+     answered, so a refusal left the button looking inert — the exact "the
+     undo button does nothing" symptom. The error belongs on screen. */
+  hostState = 'ours';
+  hostCode = 'not-ours';
+  currentState = stateWith({
+    current: { provider: 'p', model: 'm-owned', reasoningEffort: 'high' },
+    groups: OWNED_SHAPE,
+    retainedEffort: 'high'
+  });
+  const refused = mountControl();
+  tree = openIt(refused);
+  await flush();
+  tree = refused.draw();
+  check('a declared ladder offers the removal action',
+    first(tree, 'te-act') !== void 0 && textOf(first(tree, 'te-act')) === app.dictionary.zh['act.revert'],
+    textOf(tree));
+  first(tree, 'te-act').props.onClick();
+  await flush();
+  tree = refused.draw();
+  check('a refused removal reports its cause in the footer',
+    first(tree, 'te-footErr') !== void 0 &&
+    textOf(first(tree, 'te-footErr')).indexOf(app.dictionary.zh['why.not-ours']) >= 0, textOf(tree));
+  check('a refused removal keeps the removal affordance up',
+    first(tree, 'te-act') !== void 0, textOf(tree));
+  hostCode = null;
+  refused.dispose();
+
+  /* --- the Host's verdict is asked even on a ladder that IS selectable ---
+     The read used to happen only for a ladder too thin to choose from, so the
+     plugin never learned what the Host thought about a ladder it declared —
+     and the two conditions could never hold at once. */
+  hostState = 'ours';
+  hostCalls.length = 0;
+  currentState = stateWith({
+    current: { provider: 'p', model: 'm-owned', reasoningEffort: 'high' },
+    groups: OWNED_SHAPE,
+    retainedEffort: 'high'
+  });
+  const asked = mountControl();
+  tree = openIt(asked);
+  await flush();
+  tree = asked.draw();
+  const verdict = hostCalls.find((c) => c.method === 'GET' && c.url.indexOf('levels') >= 0);
+  check('the Host is asked for its verdict on a selectable ladder too',
+    verdict !== void 0 && verdict.url.indexOf('model=m-owned') > 0, JSON.stringify(hostCalls));
+  /* The Host says the ladder is ours, so the removal is offered — and the
+     HOST's word is what decides, not the local shape. */
+  check('a ladder the Host calls ours offers the removal action',
+    first(tree, 'te-act') !== void 0 && textOf(first(tree, 'te-act')) === app.dictionary.zh['act.revert'],
+    textOf(tree));
+  asked.dispose();
+
+  /* --- a ladder the Host does NOT call ours offers no removal ---
+     The local shape can match while the Host disagrees (a stale catalogue, a
+     ladder somebody else wrote in the same shape). Offering a removal the
+     Host will refuse is the "the undo button does nothing" symptom. */
+  hostState = 'native';
+  currentState = stateWith({
+    current: { provider: 'p', model: 'm-owned', reasoningEffort: 'high' },
+    groups: OWNED_SHAPE,
+    retainedEffort: 'high'
+  });
+  const native = mountControl();
+  tree = openIt(native);
+  await flush();
+  tree = native.draw();
+  check('a ladder the Host does not call ours offers no removal',
+    first(tree, 'te-act') === void 0 || textOf(first(tree, 'te-act')) !== app.dictionary.zh['act.revert'],
+    textOf(tree));
+  native.dispose();
+
+  /* --- a REMOVAL clears the session's own effort ---
+     The durable projection keeps naming the level that was just removed, and
+     the request path then refuses every request for that model. The removal
+     therefore also selects the same model without an effort — which the Host
+     saves as the global default too, so the strand leaves `agent-default-model`
+     with it and the NEXT session does not start on a dead level. */
+  hostState = 'ours';
+  hostCalls.length = 0;
+  selectCalls.length = 0;
+  currentState = stateWith({
+    current: { provider: 'p', model: 'm-owned', reasoningEffort: 'high' },
+    groups: OWNED_SHAPE,
+    retainedEffort: 'high'
+  });
+  const removing = mountControl();
+  tree = openIt(removing);
+  await flush();
+  tree = removing.draw();
+  first(tree, 'te-act').props.onClick();
+  await flush();
+  await flush();
+  tree = removing.draw();
+  const removal = hostCalls.find((c) => c.method === 'POST');
+  check('removing posts the revert action', removal !== void 0 && removal.body.action === 'revert',
+    JSON.stringify(removal && removal.body));
+  check('a removal clears the session effort as well',
+    selectCalls.length === 1 && selectCalls[0].reasoningEffort === void 0 &&
+    selectCalls[0].provider === 'p' && selectCalls[0].model === 'm-owned',
+    JSON.stringify(selectCalls));
+  removing.dispose();
+
+  /* --- a STRANDED level: reported, never repaired behind the user's back ---
+     `session/selectModel` saves every successful choice as the GLOBAL default,
+     so a dead level left there makes every LATER session start parked on it
+     and the control looks frozen again in the next conversation. An automatic
+     repair would rewrite that global default as a side effect of merely
+     opening the composer, so the strand is reported with the one action that
+     fixes it. */
+  hostState = 'undeclared';
+  hostCalls.length = 0;
+  selectCalls.length = 0;
+  /* The Host reports the levels the request path accepts. An EMPTY list is a
+     real answer — "this model takes no effort" — and it is what makes the
+     stored level stranded. (`null` would mean "could not be read", and
+     nothing may be concluded from that.) */
+  hostLevels = [];
+  currentState = stateWith({
+    current: { provider: 'p', model: 'm-none', reasoningEffort: 'max' },
+    groups: NO_LADDER,
+    retainedEffort: 'max'
+  });
+  const stranded = mountControl();
+  tree = openIt(stranded);
+  await flush();
+  await flush();
+  tree = stranded.draw();
+  check('a stranded level is not repaired behind the user\'s back',
+    selectCalls.length === 0, JSON.stringify(selectCalls));
+  check('a stranded level is reported with a reset action',
+    first(tree, 'te-footErr') !== void 0 && first(tree, 'te-act') !== void 0 &&
+    textOf(first(tree, 'te-act')) === app.dictionary.zh['act.reset'], textOf(tree));
+  first(tree, 'te-act').props.onClick();
+  tree = stranded.draw();
+  check('the reset action clears the effort and keeps the model',
+    selectCalls.length === 1 && selectCalls[0].reasoningEffort === void 0 &&
+    selectCalls[0].provider === 'p' && selectCalls[0].model === 'm-none',
+    JSON.stringify(selectCalls));
+  hostLevels = null;
+  stranded.dispose();
+
   /* --- no carrier at all --- */
   const carrier = globalThis.fetch;
   globalThis.fetch = undefined;
@@ -1420,7 +1872,7 @@ const declareSuite = (async () => {
         !/\.te-chip(Idle|On|Active)\{/.test(sheet));
     }
   }
-})();
+};
 
 /* ------------------------------------------------------------------ *
  * Boot order: the Session is not addressable yet
@@ -1471,9 +1923,9 @@ async function bootRetry() {
 
 /* The two async suites share the fake host and the module-level `currentState`,
    so they must not overlap: the declare suite installs `fetch`, the boot suite
-   swaps the directory. Chained explicitly for that reason. */
-declareSuite.then(bootRetry).then(() => {
-  for (const handle of [six, drag, noop, step, keys, forced].filter(Boolean)) handle.dispose();
+   swaps the directory. Chained explicitly for that reason. The selection-timing
+   suite swaps the `select` stub, so it runs first and restores it. */
+asyncSuite().then(declareSuite).then(bootRetry).then(() => {  for (const handle of [six, drag, noop, step, keys, forced].filter(Boolean)) handle.dispose();
 
   const failed = results.filter((r) => !r.ok);
   console.log('\n' + (results.length - failed.length) + '/' + results.length + ' checks passed');
