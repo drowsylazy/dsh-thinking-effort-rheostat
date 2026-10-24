@@ -147,7 +147,7 @@ const MODEL = "agentrouter/deepseek-v4-flash";
   check("declare: returns a detached object", next !== before);
 
   const written = next.providers.undarouter.models[0].reasoningEfforts;
-  check("declare: writes exactly the standard set", JSON.stringify(written) === JSON.stringify({ low: "low", medium: "medium", high: "high" }), JSON.stringify(written));
+  check("declare: writes exactly the standard set", JSON.stringify(written) === JSON.stringify({ low: "low", medium: "medium", high: "high", xhigh: "xhigh", max: "max" }), JSON.stringify(written));
 
   /* Everything else in the config has to survive byte for byte: this write goes
      into a profile the user maintains by hand. */
@@ -188,7 +188,7 @@ const MODEL = "agentrouter/deepseek-v4-flash";
   badLevels({ off: null, minimal: null }, "declare: a ladder with only 'off' is refused");
   badLevels({ off: "low" }, "declare: a wire value on 'off' is refused");
   check("declare: omitting the levels argument still writes the standard set",
-    JSON.stringify(planDeclare(before, PROVIDER, MODEL).next.providers.undarouter.models[0].reasoningEfforts) === JSON.stringify({ low: "low", medium: "medium", high: "high" }));
+    JSON.stringify(planDeclare(before, PROVIDER, MODEL).next.providers.undarouter.models[0].reasoningEfforts) === JSON.stringify({ low: "low", medium: "medium", high: "high", xhigh: "xhigh", max: "max" }));
 }
 
 // ----------------------------------------------------------------- planRevert
@@ -336,7 +336,7 @@ const MODEL = "agentrouter/deepseek-v4-flash";
   check("shape: an empty string on a real level is refused", isManagedLadder({ low: "" }) === false);
 
   const keys = planDeclare(profile(), PROVIDER, MODEL).next;
-  check("keys: a declared ladder lists its keys", JSON.stringify(declaredLadderKeys(keys, PROVIDER, MODEL)) === JSON.stringify(["low", "medium", "high"]));
+  check("keys: a declared ladder lists its keys", JSON.stringify(declaredLadderKeys(keys, PROVIDER, MODEL)) === JSON.stringify(["low", "medium", "high", "xhigh", "max"]));
   const customKeys = planDeclare(profile(), PROVIDER, MODEL, { max: "M", off: null, low: "l" }).next;
   check("keys: a custom ladder lists its keys in vocabulary order", JSON.stringify(declaredLadderKeys(customKeys, PROVIDER, MODEL)) === JSON.stringify(["off", "low", "max"]));
   check("keys: an absent ladder is an empty list", declaredLadderKeys(profile(), PROVIDER, MODEL).length === 0);
@@ -367,7 +367,7 @@ const MODEL = "agentrouter/deepseek-v4-flash";
   check("schema: every key is a level pi-ai knows", keys.every((key) => THINKING_LEVELS.includes(key)), keys.join(","));
   check("schema: every wire value is a non-empty string", keys.every((key) => typeof DECLARED_EFFORTS[key] === "string" && DECLARED_EFFORTS[key].length > 0));
   check("schema: at least one level is not 'off'", keys.some((key) => key !== "off"));
-  check("schema: DECLARED_LEVELS is escalation order, not alphabetical", DECLARED_LEVELS.join(",") === "low,medium,high", DECLARED_LEVELS.join(","));
+  check("schema: DECLARED_LEVELS is escalation order, not alphabetical", DECLARED_LEVELS.join(",") === "low,medium,high,xhigh,max", DECLARED_LEVELS.join(","));
   check("schema: DECLARED_LEVELS is derived from the dict", DECLARED_LEVELS.every((level) => Object.hasOwn(DECLARED_EFFORTS, level)));
   check("schema: no 'off' level is offered", !DECLARED_LEVELS.includes("off"));
 }
@@ -425,6 +425,17 @@ const MODEL = "agentrouter/deepseek-v4-flash";
   }
   check("modelsdev: the feed is cached, not fetched per request", /MODELSDEV_TTL/.test(host) && /modelsDevFeed/.test(host));
   check("modelsdev: the fetch cannot hang the pool", /AbortSignal\.timeout/.test(host));
+  /* The same model is listed by dozens of providers with DIFFERENT ladders —
+     `gpt-6.1-sol` is published with five levels by most of them and with three
+     by a few. Ranking by feed order alone made the suggested ladder a coin
+     flip, so the one-click enable wrote three stops where the upstream offers
+     five. Both halves now pick the WIDEST ladder; both are asserted here. */
+  check("modelsdev: the host ranks equal matches by ladder width",
+    /right\.coverage - left\.coverage/.test(host) && /effortCoverage\(entry\)/.test(host),
+    "the host must order equal-scoring matches by how many levels they publish");
+  check("modelsdev: the client picks the widest match, not the first row",
+    /widestMatch\(payload\.matches\)/.test(client) && /function widestMatch\(matches\)/.test(client),
+    "the client must choose the match with the most selectable levels");
 
   /* Every code the Host can answer with needs a dictionary entry in both
      languages, or the panel would print a raw identifier. */
@@ -500,8 +511,10 @@ const MODEL = "agentrouter/deepseek-v4-flash";
   const other = planClearDefault({ provider: PROVIDER, model: "another", reasoningEffort: "high" }, PROVIDER, MODEL);
   check("default: leaves another model's selection alone", other.changed === false && other.next.reasoningEffort === "high");
 
-  const foreign = planClearDefault({ provider: PROVIDER, model: MODEL, reasoningEffort: "xhigh" }, PROVIDER, MODEL);
-  check("default: leaves a level we never declared alone", foreign.changed === false && foreign.next.reasoningEffort === "xhigh");
+  /* `minimal` is a vocabulary id we never declare (the ladder stops at low),
+     so a selection on it is not ours to clean up. */
+  const foreign = planClearDefault({ provider: PROVIDER, model: MODEL, reasoningEffort: "minimal" }, PROVIDER, MODEL);
+  check("default: leaves a level we never declared alone", foreign.changed === false && foreign.next.reasoningEffort === "minimal");
 
   const none = planClearDefault({ provider: PROVIDER, model: MODEL }, PROVIDER, MODEL);
   check("default: a selection with no effort is untouched", none.changed === false);

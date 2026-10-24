@@ -47,21 +47,36 @@
  *
  * `THINKING_LEVELS` in `dsh-llm-pi-ai` is
  * `off, minimal, low, medium, high, xhigh, max` (escalation order). This set
- * takes the three OpenAI-compatible spellings every `openai-completions`
- * gateway understands: `minimal` is an OpenAI-only value many aggregators
- * reject, and `xhigh`/`max` are re-spellings that would need the gateway's own
- * vocabulary. `off` is left out on purpose — undeclared levels are pinned to
- * unsupported by `resolveModelReasoning`, and adding `off` would only add a
- * position that merely omits the parameter.
+ * takes the OpenAI-compatible spellings a `openai-completions` gateway
+ * understands: `minimal` is an OpenAI-only value many aggregators reject, and
+ * `off` is left out on purpose — undeclared levels are pinned to unsupported by
+ * `resolveModelReasoning`, and adding `off` would only add a position that
+ * merely omits the parameter.
  *
- * The client half mirrors these ids in its own `FORCED_LEVELS`; the two files
+ * The ladder is FIVE levels, not three: `gpt-6.1-sol` and the other
+ * OpenAI-line models publish `low, medium, high, xhigh, max` upstream (the
+ * OpenAI catalogue, opencode, openrouter and most aggregators agree), and a
+ * declaration that stops at `high` silently removes the two top stops from
+ * models that do offer them. `xhigh` and `max` are the same spelling upstream
+ * uses, so a gateway that does not know them is a gateway that never offered
+ * them either — the Host refuses an unsupported effort at request time
+ * anyway, so an extra stop costs the user nothing and a missing one costs a
+ * level they could have used.
+ *
+ * The client half mirrors these ids in its own `PREVIEW_LEVELS`; the two files
  * cannot import each other (host and browser bundles are separate), so
  * `tools/smoke-declare.mjs` asserts that the mirror stays identical.
  */
-export const DECLARED_EFFORTS = { low: "low", medium: "medium", high: "high" };
+export const DECLARED_EFFORTS = {
+	low: "low",
+	medium: "medium",
+	high: "high",
+	xhigh: "xhigh",
+	max: "max"
+};
 
 /** Levels in escalation order, for a caller that needs the ordered list. */
-export const DECLARED_LEVELS = ["low", "medium", "high"];
+export const DECLARED_LEVELS = ["low", "medium", "high", "xhigh", "max"];
 
 /**
  * The full `THINKING_LEVELS` vocabulary of `dsh-llm-pi-ai`, escalation order.

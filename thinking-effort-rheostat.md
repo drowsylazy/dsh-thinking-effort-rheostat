@@ -878,3 +878,13 @@ resolveModelInfo(provider, model).reasoning.efforts.map(e => e.id)   // 请求�
 - **代码面 5 处**：`bundle/package.json` 的 `name`；`bundle/cordis.patch.yml` insert 行的 `name`（槽位 id `thinking-effort` 不变，slot/样式字典命名空间不受影响）；`bundle/client.js` 的 `__ModuleLoader__.load({id})` 与 `PACKAGE` 常量（`PACKAGE` 派生 `STYLE_ID` 与样式标签 `data-plugin`，随之统一）；`tools/smoke.js` 的 bundle id 断言。
 - **安装面 3 处**：profile `package.json` 的 `dependencies` 与 `dsh.profile.bundles` 两处旧名改为新名（同一条 `link:F:/dsh-thinking-effort-rheostat/bundle`）；`node_modules/@local` 下的 junction 由 `dsh-thinking-effort` 换成 `dsh-thinking-effort-rheostat`（同指 `bundle/`）。`list_bundles` 确认：`availability:"profile"`、`installed:true`、`rows:[{rowId:"thinking-effort"}]` 正常解析，missing 报错消失。
 - 遗留痕迹：profile 里 `thinking-effort-loaded.json` 是旧版（@hytime 时代）的 apply 标记，非当前安装机制的一部分，不动。`node --check`、`smoke 159/159`、`smoke-declare 137` 全绿。
+
+## 20. v4.0 变更记录（档位取上游真实档数：五档而不是三档）
+
+用户反馈：正在用的 `gpt-6.1-sol` 上游明明有五档，滑块只给三档。
+
+- **先分清三个"档数"**。①上游实际支持几档（models.dev 与适配器目录）；②档案里给这个模型**申报**了几档（profile 的 `reasoningEfforts`）；③插件**默认**写几档（`DECLARED_EFFORTS`）。三处各自为政时，用户看到的只反映其中一处。
+- **根因一：默认梯子写死三档**。`config-declare.js` 的 `DECLARED_EFFORTS` 与客户端镜像 `PREVIEW_LEVELS` 都是 low/medium/high——一键启用查不到目录时、或预览未申报的模型时，永远只有三档，而 OpenAI 系模型的上游（`gpt-6.1-sol`、`gpt-6-sol`、GLM、DeepSeek V4.1 等，OpenAI 官方与 opencode/openrouter/commandcode 等几乎所有上游一致）都是 **low/medium/high/xhigh/max 五档**。现已把两处默认梯子扩为**五档**，`xhigh`/`max` 用上游同款拼写；网关不认这两个值时宿主在请求前就会拒绝，多一个档位不伤用户，少一个档位则是**砍掉了用户本来能用的档**。
+- **根因二：目录匹配取"第一条"，等于抛硬币**。同一个模型被几十个 provider 收录且**档数不一致**：`gpt-6.1-sol` 多数给五档，少数（aimlapi/cortecs/…）只给三档。旧实现同分时按 feed 原序取第一条，于是"一键启用"写几档取决于 models.dev 当天的返回顺序。现在**两端都改为取最宽的那条**：宿主 `matchModelsDev` 按 `effortCoverage(entry)`（不同 effort 值的个数）二次排序，客户端 `widestMatch()` 在所有匹配里选档位最多的那条。选择器预填同样走这条路径。
+- **根因三：本机档案少申报一档**。`unda-router` 路由上 `agent-router/gpt-6.1-sol` 原本只申报 low/medium/high/xhigh（缺 `max`），已按上游补成五档；同路由的 GLM-5.3-Flash（3 档）、MiniMax-M3.1-Flash（6 档）保持原样——**档数按模型自适应，不做全局一刀切**。
+- **验证**：用真实 models.dev 数据跑通两端代码——`gpt-6.1-sol` → low/medium/high/xhigh/max；`glm-5.3-flash` → minimal/low/medium/high/xhigh/max；`deepseek-v4.1-flash` → 同上（各自取上游最宽）。门禁：`node --check` ×3、`smoke 159/159`、`smoke-declare 139`（新增两条：宿主按覆盖度排序、客户端取最宽匹配）、`audit-css`、`contrast` 全绿。

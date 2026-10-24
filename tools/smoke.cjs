@@ -968,8 +968,8 @@ const forced = mountControl();
 tree = openIt(forced);
 
 check('a forced ladder still opens the panel', first(tree, 'te-panel') !== void 0);
-check('a forced ladder previews the three declarable stops',
-  first(tree, 'te-rail') !== void 0 && findAll(tree, byClass('te-tick')).length === 3,
+check('a forced ladder previews the five declarable stops',
+  first(tree, 'te-rail') !== void 0 && findAll(tree, byClass('te-tick')).length === 5,
   String(findAll(tree, byClass('te-tick')).length));
 check('a forced rail is marked idle', first(tree, 'te-railIdle') !== void 0);
 check('an idle rail draws no thumb (nothing to move)', first(tree, 'te-thumb') === void 0);
@@ -1016,14 +1016,22 @@ const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 let hostState = 'undeclared';
 let hostCode = null;
 const hostCalls = [];
-/* One models.dev answer, deep-copied per request so a prefill cannot mutate it. */
+/* One models.dev answer, deep-copied per request so a prefill cannot mutate it.
+   TWO rows on purpose: the same model is listed by many providers with
+   different ladders, and the plugin must pick the WIDEST one — a narrow row
+   first would have hidden that. The first row is the narrow one, so the test
+   fails if the plugin takes the first match instead of the widest. */
 const modelsDevMatch = {
   ok: true,
-  count: 1,
+  count: 2,
   matches: [{
-    provider: 'deepseek', id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', reasoning: true,
-    efforts: ['low', 'high'],
+    provider: 'aimlapi', id: 'openai/gpt-6.1-sol', name: 'GPT-6.1 Sol', reasoning: true,
+    efforts: ['low', 'medium', 'high'],
     options: [{ type: 'effort', values: ['low', 'medium', 'high'] }]
+  }, {
+    provider: 'openai', id: 'openai/gpt-6.1-sol', name: 'GPT-6.1 Sol', reasoning: true,
+    efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+    options: [{ type: 'effort', values: ['low', 'medium', 'high', 'xhigh', 'max'] }]
   }]
 };
 globalThis.fetch = (input, init) => {
@@ -1087,7 +1095,7 @@ const declareSuite = (async () => {
   const direct = hostCalls.find((c) => c.method === 'POST');
   check('the one-click enable writes the suggested ladder directly',
     direct !== void 0 && direct.body.action === 'declare' && direct.body.provider === 'p' && direct.body.model === 'm-none' &&
-    JSON.stringify(direct.body.levels) === JSON.stringify({ low: 'low', medium: 'medium', high: 'high' }),
+    JSON.stringify(direct.body.levels) === JSON.stringify({ low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh', max: 'max' }),
     JSON.stringify(direct === void 0 ? '{}' : direct.body));
   check('the suggestion precedes the write',
     suggested !== void 0 && direct !== void 0 && hostCalls.indexOf(suggested) < hostCalls.indexOf(direct),
@@ -1160,28 +1168,28 @@ const declareSuite = (async () => {
     chips.map((c) => textOf(c)).join(',') === 'Off,Minimal,Low,Medium,High,Xhigh,Max',
     chips.map((c) => textOf(c)).join(','));
   check('a models.dev match pre-fills the selection',
-    findAll(tree, byClass('te-lvlOn')).map((c) => textOf(c)).join(',') === 'Low,Medium,High',
+    findAll(tree, byClass('te-lvlOn')).map((c) => textOf(c)).join(',') === 'Low,Medium,High,Xhigh,Max',
     findAll(tree, byClass('te-lvlOn')).map((c) => textOf(c)).join(','));
   check('the wire spelling stays out of the default path',
     findAll(tree, byClass('te-wireInput')).length === 0, textOf(tree));
   check('the draft drives the idle preview above the picker',
-    findAll(tree, byClass('te-tick')).length === 3,
+    findAll(tree, byClass('te-tick')).length === 5,
     String(findAll(tree, byClass('te-tick')).length));
-  check('the pre-filled match is named in the picker note', textOf(tree).indexOf('deepseek-v4-flash') >= 0, textOf(tree));
+  check('the pre-filled match is named in the picker note', textOf(tree).indexOf('gpt-6.1-sol') >= 0, textOf(tree));
 
   /* --- the expert rows live behind the toggle --- */
   first(tree, 'te-choAdv').props.onClick();
   tree = custom.draw();
   check('opening the toggle reveals the wire rows pre-filled',
-    findAll(tree, byClass('te-wireInput')).map((w) => w.props.value).join(';') === 'low;medium;high',
+    findAll(tree, byClass('te-wireInput')).map((w) => w.props.value).join(';') === 'low;medium;high;xhigh;max',
     findAll(tree, byClass('te-wireInput')).map((w) => w.props.value).join(';'));
   chips = findAll(tree, byClass('te-lvl'));
-  chips[6].props.onClick();
+  chips[1].props.onClick();
   tree = custom.draw();
   check('picking a level adds its wire row and extends the preview',
-    findAll(tree, byClass('te-lvlOn')).length === 4 &&
-    findAll(tree, byClass('te-wireInput')).length === 4 &&
-    findAll(tree, byClass('te-tick')).length === 4,
+    findAll(tree, byClass('te-lvlOn')).length === 6 &&
+    findAll(tree, byClass('te-wireInput')).length === 6 &&
+    findAll(tree, byClass('te-tick')).length === 6,
     String(findAll(tree, byClass('te-lvlOn')).length) + '/' +
     String(findAll(tree, byClass('te-wireInput')).length) + '/' +
     String(findAll(tree, byClass('te-tick')).length));
@@ -1192,7 +1200,7 @@ const declareSuite = (async () => {
   check('cancelling closes the picker', first(tree, 'te-cho') === void 0, textOf(tree));
   check('cancelling restores the plain note and the action',
     first(tree, 'te-footNote') !== void 0 && first(tree, 'te-act') !== void 0, textOf(tree));
-  check('cancelling restores the fixed preview', findAll(tree, byClass('te-tick')).length === 3,
+  check('cancelling restores the fixed preview', findAll(tree, byClass('te-tick')).length === 5,
     String(findAll(tree, byClass('te-tick')).length));
 
   /* --- reopening is fresh; apply writes a CUSTOMIZED ladder --- */
@@ -1202,7 +1210,7 @@ const declareSuite = (async () => {
     String(findAll(tree, byClass('te-lvlOn')).length));
   await flush();
   tree = custom.draw();
-  check('the fresh draft re-prefills from models.dev', findAll(tree, byClass('te-lvlOn')).length === 3,
+  check('the fresh draft re-prefills from models.dev', findAll(tree, byClass('te-lvlOn')).length === 5,
     String(findAll(tree, byClass('te-lvlOn')).length));
   hostCalls.length = 0;
   first(tree, 'te-btnApply').props.onClick();
@@ -1212,7 +1220,7 @@ const declareSuite = (async () => {
     post !== void 0 && post.body.action === 'declare' && post.body.provider === 'p' && post.body.model === 'm-none',
     JSON.stringify(hostCalls));
   check('the picker posts the wired levels, in vocabulary order',
-    post !== void 0 && JSON.stringify(post.body.levels) === JSON.stringify({ low: 'low', medium: 'medium', high: 'high' }),
+    post !== void 0 && JSON.stringify(post.body.levels) === JSON.stringify({ low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh', max: 'max' }),
     post === void 0 ? '{}' : JSON.stringify(post.body.levels));
   check('the picker closes after the write lands', first(custom.draw(), 'te-cho') === void 0);
 

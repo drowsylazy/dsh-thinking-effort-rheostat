@@ -358,10 +358,17 @@ function modelsDevEntry(provider, model) {
 /**
  * Rank catalogue models whose id or name answers one query.
  *
- * A full `provider/model` id always outranks a substring guess; within one
- * score, providers keep feed order. The query is the model id's own spelling:
- * matching is a lookup aid, the Client still decides what to declare from the
- * matched model's option values.
+ * A full `provider/model` id always outranks a substring guess. Within one
+ * score the ordering is by COVERAGE — how many thinking levels the entry
+ * publishes — because the same model is listed by dozens of providers and they
+ * do not agree: `gpt-6.1-sol` is offered with five levels by most of them
+ * (low, medium, high, xhigh, max) and with three by a few. Picking "the first
+ * match in feed order" then made the suggested ladder a coin flip — the
+ * one-click enable wrote three levels where the upstream offers five. The
+ * widest ladder wins; feed order only breaks a genuine tie.
+ *
+ * The query is the model id's own spelling: matching is a lookup aid, the
+ * Client still decides what to declare from the matched model's option values.
  */
 function matchModelsDev(feed, query, providerFilter) {
 	const needle = query.toLowerCase();
@@ -383,12 +390,14 @@ function matchModelsDev(feed, query, providerFilter) {
 			else if (needle.length >= 4 && (bare.includes(needle) || id.toLowerCase().includes(needle))) score = 2;
 			else if (needle.length >= 4 && name.includes(needle)) score = 3;
 			if (score < 0) continue;
-			results.push({ score, entry: modelsDevEntry(providerKey, model) });
+			const entry = modelsDevEntry(providerKey, model);
+			results.push({ score, coverage: effortCoverage(entry), order: results.length, entry });
 		}
 	}
 	/* Dedupe by provider + id: two aliases in the feed must not fill the row. */
 	const seen = new Set();
-	results.sort((left, right) => left.score - right.score);
+	results.sort((left, right) =>
+		left.score - right.score || right.coverage - left.coverage || left.order - right.order);
 	const unique = [];
 	for (const result of results) {
 		const key = result.entry.provider + "\x1f" + result.entry.id;
@@ -398,6 +407,26 @@ function matchModelsDev(feed, query, providerFilter) {
 		if (unique.length >= MODELSDEV_MATCHES) break;
 	}
 	return unique;
+}
+
+/**
+ * How many thinking levels one catalogue entry publishes.
+ *
+ * Counts the distinct effort values it offers, so an entry that names the same
+ * level twice cannot look wider than it is, and an entry with no effort option
+ * at all scores zero (it contributes nothing to the ranking).
+ *
+ * @param {object} entry - one catalogue entry, as `modelsDevEntry` shapes it.
+ * @returns {number} the number of distinct effort values.
+ */
+function effortCoverage(entry) {
+	if (!isPlainObject(entry)) return 0;
+	const values = new Set();
+	for (const option of Array.isArray(entry.options) ? entry.options : []) {
+		if (!isPlainObject(option) || option.type !== "effort") continue;
+		for (const value of Array.isArray(option.values) ? option.values : []) values.add(String(value));
+	}
+	return values.size;
 }
 
 /**

@@ -114,14 +114,16 @@ window.__ModuleLoader__.load({
 		 * are a preview of what declaring the ladder would unlock.
 		 *
 		 * The ids are the set the Host half writes when no customization is
-		 * requested (`DECLARED_EFFORTS` in `bundle/config-declare.js`). The two
+		 * requested (`DECLARED_EFFORTS` in `config-declare.js`). The two
 		 * halves are separate bundles and cannot import each other, so
 		 * `tools/smoke-declare.mjs` asserts the mirror stays identical.
 		 */
 		const PREVIEW_LEVELS = [
 			{ id: "low", name: "Low" },
 			{ id: "medium", name: "Medium" },
-			{ id: "high", name: "High" }
+			{ id: "high", name: "High" },
+			{ id: "xhigh", name: "Xhigh" },
+			{ id: "max", name: "Max" }
 		];
 
 		/**
@@ -1007,6 +1009,34 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
+		 * The widest ladder the catalogue offers for one model.
+		 *
+		 * The same model is listed by dozens of providers and they do not agree
+		 * on how many levels it has: `gpt-6.1-sol` is published with five
+		 * (low, medium, high, xhigh, max) by most of them and with three by a
+		 * few. Taking the FIRST match made the suggestion a coin flip, and the
+		 * one-click enable then wrote three stops where the upstream offers
+		 * five. The widest ladder wins; a tie keeps the Host's own order.
+		 *
+		 * @param {object[]} matches - the catalogue rows, best first.
+		 * @returns {object|null} the row with the most selectable levels.
+		 */
+		function widestMatch(matches) {
+			if (!Array.isArray(matches) || matches.length === 0) return null;
+			let best = null;
+			let bestIds = null;
+			for (const match of matches) {
+				const ids = matchLadderIds(match);
+				if (ids === null) continue;
+				if (bestIds === null || ids.length > bestIds.length) {
+					best = match;
+					bestIds = ids;
+				}
+			}
+			return best;
+		}
+
+		/**
 		 * The level picker: the CUSTOM detour, opened only from the footer's
 		 * "自定义…" link. The one-click enable in the footer does the ordinary
 		 * job — suggest the catalogue ladder (or the standard one) and write
@@ -1105,7 +1135,7 @@ window.__ModuleLoader__.load({
 							setLookup({ state: "none", matches: [], index: -1 });
 							return;
 						}
-						prefill(payload.matches[0], payload.matches);
+						prefill(widestMatch(payload.matches) ?? payload.matches[0], payload.matches);
 					})
 					.catch(() => {
 						setLookup({ state: "failed", matches: [], index: -1 });
@@ -1425,10 +1455,9 @@ window.__ModuleLoader__.load({
 					fetch(MODELSDEV_ROUTE + "?name=" + encodeURIComponent(bare), { headers: { accept: "application/json" } })
 						.then((response) => response.ok ? response.json() : Promise.reject(new Error("HTTP " + String(response.status))))
 						.then((payload) => {
-							const match = !absent(payload) && payload.ok === true &&
-								Array.isArray(payload.matches) && payload.matches.length > 0
-								? payload.matches[0] : null;
-							const ids = matchLadderIds(match);
+							const matches = !absent(payload) && payload.ok === true && Array.isArray(payload.matches)
+								? payload.matches : [];
+							const ids = matchLadderIds(widestMatch(matches));
 							write(ids !== null ? ids : DEFAULT_PREVIEW_IDS.slice());
 						})
 						.catch(() => write(DEFAULT_PREVIEW_IDS.slice()));
