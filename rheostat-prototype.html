@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Thinking Effort · DSH</title>
+<style>
+/* ══════════════════════════════════════════════════════════════
+   Thinking Effort · v4
+   · 品牌色：DeepSeek 蓝 #5686fe（亮色加深为 #3b6ef6）
+   · 几何：圆角方形，无胶囊
+   · 卡片：极简（Effort 名 + Faster/Smarter + 轨道）
+   · 最高档：5 排方块阵列 + 自右向左的随机散点闪烁
+   ══════════════════════════════════════════════════════════════ */
+
+@property --p { syntax:'<number>'; inherits:true; initial-value:0 }
+
+*,*::before,*::after{ box-sizing:border-box }
+
+/* ── 主题令牌 ──
+   品牌色：DeepSeek 官方 logo 蓝 #5686fe
+     暗色：直接用 #5686fe（在 #131519 上对比约 6.2:1）
+     亮色：加深为 #3b6ef6（#5686fe 在白底上只有约 3.3:1，13px 半粗字偏弱） */
+.app[data-theme="dark"]{
+  --bg-base:#0b0c0f; --bg-1:#131519; --bg-2:#1d2026; --overlay:#111418;
+  --line:rgba(255,255,255,.07);
+  --fg-1:#e9ebf0; --fg-2:#98a1b0; --fg-3:#697184;
+  --brand:#5686fe;
+  --key:#f5f7fa;
+  --shadow:0 1px 1px rgba(0,0,0,.4), 0 10px 28px -6px rgba(0,0,0,.65);
+  --track:rgba(0,0,0,.32);
+}
+.app[data-theme="light"]{
+  /* 底色实际由下方一条规则给出（极浅竖向渐变）；
+     这里的 --bg-base 只作为不透明兜底色，避免渐变边缘露馅 */
+  --bg-base:#f6f8fc; --bg-1:#ffffff; --bg-2:#f1f4f9; --overlay:#ffffff;
+  --line:rgba(15,23,42,.08);
+  --fg-1:#0e1520; --fg-2:#525b6b; --fg-3:#79828f;
+  --brand:#3b6ef6;
+  /* 阵列方块专用：比 brand 更深，才能在浅蓝进度层上"立住" */
+  --dot:#2b52c4;
+  --key:#ffffff;
+  --shadow:0 1px 2px rgba(15,23,42,.04), 0 1px 3px rgba(15,23,42,.05),
+           0 16px 34px -14px rgba(15,23,42,.18);
+  --track:#eaeef6;
+}
+
+html,body{ height:100%; margin:0 }
+body{
+  font:13px/1.5 "Inter","Segoe UI",system-ui,-apple-system,"Noto Sans SC","Microsoft YaHei",sans-serif;
+  -webkit-font-smoothing:antialiased; font-variant-numeric:tabular-nums;
+}
+.app{ min-height:100%; display:flex; flex-direction:column;
+  background:var(--bg-base); color:var(--fg-1); transition:background .25s }
+/* 浅色底：纯灰白显脏，改成"上近白、下微冷"的极浅竖向渐变，卡片才浮得起来 */
+.app[data-theme="light"]{
+  background:linear-gradient(180deg,#fdfeff 0%,#f7f9fd 46%,#eef2f9 100%) }
+
+/* ── 顶栏（原型专属，真实插件没有） ── */
+.bar{ display:flex; align-items:center; gap:14px; height:42px; padding:0 16px;
+  border-bottom:1px solid var(--line); flex:0 0 auto }
+.bar__t{ font-size:11.5px; color:var(--fg-3) }
+.bar__t b{ font-weight:600; color:var(--fg-2) }
+.bar__r{ margin-left:auto; display:flex; align-items:center; gap:12px }
+.detect{ display:flex; align-items:center; gap:6px; font-size:11px; color:var(--fg-3) }
+.detect__d{ width:5px; height:5px; border-radius:1.5px; background:var(--brand) }
+.detect.off .detect__d{ background:var(--fg-3) }
+.detect em{ font-style:normal; color:var(--fg-2) }
+.seg{ display:flex; padding:2px; gap:2px; border-radius:8px; background:var(--bg-2) }
+.seg button{ border:0; background:transparent; cursor:pointer; color:var(--fg-3);
+  font:500 11px/1 inherit; padding:5px 8px; border-radius:6px; transition:background .15s,color .15s }
+.seg button.on{ background:var(--bg-1); color:var(--fg-1) }
+.app[data-theme="light"] .seg button.on{ background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.09) }
+.sw{ display:flex; align-items:center; gap:6px; font-size:11px; color:var(--fg-3); cursor:pointer }
+.sw input{ position:absolute; opacity:0; width:0; height:0 }
+.sw i{ width:26px; height:15px; border-radius:4px; background:var(--bg-2); position:relative; transition:background .18s }
+.sw i::after{ content:""; position:absolute; top:2px; left:2px; width:11px; height:11px; border-radius:3px;
+  background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.25); transition:transform .2s cubic-bezier(.32,.72,0,1) }
+.sw input:checked + i{ background:var(--brand) }
+.sw input:checked + i::after{ transform:translateX(11px) }
+
+/* ── 舞台 ── */
+.stage{ flex:1; display:flex; align-items:center; justify-content:center; padding:28px 20px }
+
+/* ── Composer ── */
+.composer{ position:relative; width:min(620px,100%); background:var(--bg-1);
+  border:1px solid var(--line); border-radius:15px; box-shadow:var(--shadow); padding:12px }
+.editor{ padding:4px 7px 18px; min-height:54px; color:var(--fg-3); font-size:13.5px }
+.toolbar{ display:flex; align-items:center; gap:2px; padding-top:8px }
+.spacer{ flex:1 }
+
+/* ── 工具行控件：无边框，对齐 DSH 自带模型选择器 ── */
+.chip{ display:inline-flex; align-items:center; gap:6px; height:28px; padding:0 9px;
+  border:0; border-radius:8px; background:transparent; color:var(--fg-2);
+  font:500 12.5px/1 inherit; cursor:pointer; white-space:nowrap;
+  transition:background .16s ease, color .16s ease, opacity .24s ease,
+             width .28s cubic-bezier(.32,.72,0,1), padding .28s cubic-bezier(.32,.72,0,1),
+             transform .28s cubic-bezier(.32,.72,0,1) }
+.chip:hover{ background:var(--bg-2); color:var(--fg-1) }
+.chip:focus-visible{ outline:none; box-shadow:0 0 0 2px var(--bg-1),0 0 0 4px var(--brand) }
+.chip__tx{ max-width:170px; overflow:hidden; text-overflow:ellipsis }
+.chip__cv{ opacity:.5; display:flex; transition:transform .22s cubic-bezier(.32,.72,0,1) }
+.chip[aria-expanded="true"] .chip__cv{ transform:rotate(180deg) }
+/* 工具行永远中性色：档位高低不改外面的颜色 */
+.chip--effort.is-open{ background:var(--bg-2); color:var(--fg-1) }
+/* 自动检测：模型不支持 → 收起 */
+.chip--effort.is-gone{ width:0; padding:0; opacity:0; transform:scale(.9); overflow:hidden; pointer-events:none }
+
+.send{ width:30px; height:30px; border-radius:9px; border:0; cursor:pointer; margin-left:6px;
+  background:var(--fg-1); color:var(--bg-1); display:grid; place-items:center;
+  transition:transform .18s cubic-bezier(.32,.72,0,1), opacity .18s }
+.send:hover{ opacity:.88 } .send:active{ transform:scale(.93) }
+
+/* ── 浮层 ── */
+.pop{ position:absolute; left:12px; bottom:50px; z-index:20;
+  background:var(--overlay); border:1px solid var(--line); border-radius:12px;
+  box-shadow:var(--shadow);
+  opacity:0; transform:translateY(5px) scale(.98); transform-origin:10px 100%;
+  pointer-events:none;
+  transition:opacity .18s ease, transform .26s cubic-bezier(.32,.72,0,1) }
+.pop.is-open{ opacity:1; transform:none; pointer-events:auto }
+
+/* ── 模型菜单 ── */
+.menu{ width:246px; padding:5px }
+.menu__i{ display:flex; align-items:center; gap:8px; width:100%; height:32px; padding:0 8px;
+  border:0; border-radius:7px; background:transparent; color:var(--fg-1);
+  font:500 12px/1 inherit; cursor:pointer; text-align:left; transition:background .14s ease }
+.menu__i:hover{ background:var(--bg-2) }
+.menu__i[aria-selected="true"]{ background:color-mix(in oklab,var(--brand) 11%,transparent) }
+.menu__ck{ width:12px; flex:0 0 auto; color:var(--brand); opacity:0; display:flex }
+.menu__i[aria-selected="true"] .menu__ck{ opacity:1 }
+.menu__n{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.menu__b{ flex:0 0 auto; font-size:10px; font-weight:600; padding:2px 6px; border-radius:5px;
+  color:var(--fg-2); background:var(--bg-2) }
+.menu__b.none{ background:transparent; border:1px dashed var(--line); color:var(--fg-3) }
+.menu__i[aria-selected="true"] .menu__b{ color:var(--brand); background:color-mix(in oklab,var(--brand) 12%,transparent) }
+
+/* ══════════ 思考强度卡片：极简 ══════════ */
+.card{ width:272px; padding:13px 13px 12px }
+
+.card__hd{ display:flex; align-items:center; gap:6px; padding:0 1px }
+.card__lb{ font-size:13px; font-weight:500; color:var(--fg-2) }
+/* 档位名：普通档一律原色，只有最高档才染品牌色（与参考实现一致） */
+.card__tr{ font-size:13px; font-weight:600; letter-spacing:-.005em; color:var(--fg-1);
+  transition:color .3s ease, opacity .16s ease, transform .16s cubic-bezier(.32,.72,0,1) }
+.card__tr.is-max{ color:var(--brand) }
+.card__tr.swap{ opacity:0; transform:translateY(3px) }
+.card__hp{ margin-left:auto; width:15px; height:15px; border:0; padding:0; border-radius:50%;
+  background:transparent; color:var(--fg-3); font:600 10px/15px inherit; cursor:help;
+  position:relative; text-align:center; transition:color .16s, background .16s }
+.card__hp:hover{ color:var(--fg-1); background:var(--bg-2) }
+.card__hp span{ position:absolute; right:-2px; bottom:20px; width:212px; padding:8px 10px;
+  border-radius:9px; background:var(--bg-2); border:1px solid var(--line);
+  box-shadow:var(--shadow); color:var(--fg-2); font:400 11px/1.6 inherit; text-align:left;
+  opacity:0; pointer-events:none; transition:opacity .16s ease; z-index:30 }
+.card__hp:hover span,.card__hp:focus-visible span{ opacity:1 }
+
+.axis{ display:flex; justify-content:space-between; margin:12px 1px 6px;
+  font-size:11.5px; font-weight:500; color:var(--fg-3) }
+
+/* ══════════ 轨道 ══════════ */
+.rail{ --pad:13px; --tw:26px; --travel:220px;
+  position:relative; height:30px; border-radius:9px;
+  background:var(--track); border:1px solid var(--line);
+  box-shadow:inset 0 1px 2px rgba(0,0,0,.14);
+  cursor:pointer; user-select:none; touch-action:none;
+  transition:--p .36s cubic-bezier(.32,.72,0,1), border-color .2s ease }
+.app[data-theme="light"] .rail{
+  box-shadow:inset 0 1px 2px rgba(15,23,42,.05) }
+.rail:hover{ border-color:rgba(255,255,255,.13) }
+.app[data-theme="light"] .rail:hover{ border-color:rgba(15,23,42,.15) }
+.rail.is-drag{ transition:none; cursor:grabbing }
+
+/* 已选进度 */
+.rail__fill{ position:absolute; left:4px; top:4px; bottom:4px;
+  width:calc(9px + var(--p) * var(--travel)); border-radius:6px;
+  background:linear-gradient(90deg,
+    color-mix(in oklab,var(--brand) 9%,transparent),
+    color-mix(in oklab,var(--brand) 26%,transparent));
+  transition:opacity .3s ease }
+/* 浅色：同样的 alpha 叠在浅轨道上会明显发蓝，压到接近"染了一点点色" */
+.app[data-theme="light"] .rail__fill{
+  background:linear-gradient(90deg,
+    color-mix(in oklab,var(--brand) 7%,transparent),
+    color-mix(in oklab,var(--brand) 16%,transparent)) }
+/* 浅色 + 最高档：阵列自己是主角，底下再铺一整条浅蓝只会互相打架 → 让位 */
+.app[data-theme="light"] .rail.is-max .rail__fill{ opacity:.28 }
+
+/* 档位刻度：圆角方块（小一点）。left 用中心锚点，故 translate 里补 -50% */
+.rail__tk{ position:absolute; top:50%; left:13px;
+  width:4px; height:4px; border-radius:1.2px;
+  transform:translate(calc(-50% + var(--t) * var(--travel)),-50%);
+  background:var(--fg-3); opacity:.42;
+  transition:background .25s ease, opacity .25s ease }
+.rail__tk.on{ background:var(--brand); opacity:1 }
+.rail.is-max .rail__tk{ opacity:0 }
+
+/* ★ 方块阵列：5 排，亮度包络由容器 mask 统一给出（有序），
+     闪烁由随机挑中的格子各自负责（无序） */
+.rail__fd{ position:absolute; inset:2px 4px; border-radius:6px; overflow:hidden;
+  display:grid; align-content:center; justify-content:center;
+  gap:2px; pointer-events:none;
+  opacity:0; clip-path:inset(0 0 0 100%);
+  transition:opacity .3s ease, clip-path 1.25s cubic-bezier(.4,0,.2,1) }
+.rail.is-max .rail__fd{ opacity:1; clip-path:inset(0 0 0 0%) }
+/* 左暗右亮的包络 —— 一次 mask 搞定，不用逐格 inline style */
+.rail__fd{
+  -webkit-mask-image:linear-gradient(to left,
+    #000 0%, #000 12%, rgba(0,0,0,.62) 34%, rgba(0,0,0,.3) 58%,
+    rgba(0,0,0,.1) 80%, transparent 100%);
+          mask-image:linear-gradient(to left,
+    #000 0%, #000 12%, rgba(0,0,0,.62) 34%, rgba(0,0,0,.3) 58%,
+    rgba(0,0,0,.1) 80%, transparent 100%) }
+.rail__fd i{ width:3px; height:3px; border-radius:1px;
+  background:var(--dot,var(--brand)); display:block }
+/* 随机散点：自右向左闪烁 */
+.rail__fd i.sk{ animation:twk var(--d,3s) linear var(--dl,0s) infinite }
+@keyframes twk{
+  0%{ opacity:.28 } 7%{ opacity:1 } 19%{ opacity:.34 } 33%{ opacity:.95 }
+  48%{ opacity:.3 } 63%{ opacity:1 } 78%{ opacity:.38 } 91%{ opacity:.9 } 100%{ opacity:.28 }
+}
+/* ── 浅色专项 ──
+   1) 阵列整体换成更深的 --dot（#2b52c4），浅底上才有"实心小方块"的硬度；
+   2) 包络的尾巴整体抬高（34% 处 .62→.74、58% 处 .3→.46、80% 处 .1→.26），
+      否则左侧方块会溶进浅蓝进度层里变成一团糊；
+   3) 闪烁下限从 .3 提到 .42，最暗的方块也还是个方块，而不是一片雾。 */
+.app[data-theme="light"] .rail__fd{
+  -webkit-mask-image:linear-gradient(to left,
+    #000 0%, #000 15%, rgba(0,0,0,.74) 36%, rgba(0,0,0,.46) 60%,
+    rgba(0,0,0,.26) 82%, rgba(0,0,0,.14) 100%);
+          mask-image:linear-gradient(to left,
+    #000 0%, #000 15%, rgba(0,0,0,.74) 36%, rgba(0,0,0,.46) 60%,
+    rgba(0,0,0,.26) 82%, rgba(0,0,0,.14) 100%) }
+.app[data-theme="light"] .rail__fd i.sk{ animation-name:twkL }
+@keyframes twkL{
+  0%{ opacity:.42 } 7%{ opacity:1 } 19%{ opacity:.5 } 33%{ opacity:.96 }
+  48%{ opacity:.44 } 63%{ opacity:1 } 78%{ opacity:.54 } 91%{ opacity:.9 } 100%{ opacity:.42 }
+}
+
+/* 滑块：圆角方形。left:0 使 p=0 时其中心恰在 13px（与首个刻度同心） */
+.rail__th{ position:absolute; top:50%; left:0;
+  width:var(--tw); height:22px; margin-top:-11px; border:0; padding:0;
+  border-radius:7px; background:var(--key); cursor:grab;
+  transform:translateX(calc(var(--p) * var(--travel)));
+  box-shadow:0 1px 3px rgba(17,24,39,.18), 0 0 0 1px rgba(17,24,39,.12),
+             inset 0 1px 0 rgba(255,255,255,.9);
+  transition:box-shadow .3s ease, transform .12s cubic-bezier(.32,.72,0,1) }
+.app[data-theme="dark"] .rail__th{
+  box-shadow:0 1px 2px rgba(0,0,0,.5), 0 0 0 1px rgba(0,0,0,.3),
+             inset 0 1px 0 rgba(255,255,255,.85) }
+.rail.is-drag .rail__th{ cursor:grabbing; transform:translateX(calc(var(--p) * var(--travel))) scale(1.04) }
+.rail.is-max .rail__th{
+  box-shadow:0 1px 2px rgba(0,0,0,.38), 0 0 0 1px color-mix(in oklab,var(--brand) 42%,transparent),
+             0 0 14px 1px color-mix(in oklab,var(--brand) 42%,transparent),
+             inset 0 1px 0 rgba(255,255,255,.85) }
+.rail__th:focus-visible{ outline:none }
+.app .rail__th:focus-visible{ box-shadow:0 0 0 2px var(--overlay),0 0 0 4px var(--brand) }
+.rail.is-err .rail__th{ animation:shk .32s ease }
+@keyframes shk{ 0%,100%{ margin-left:0 } 30%{ margin-left:-2px } 70%{ margin-left:2px } }
+
+/* ── 礼让动效 ── */
+@media (prefers-reduced-motion:reduce){
+  .rail__fd i.sk{ animation:none }
+}
+.app.reduced .rail__fd i.sk{ animation:none !important }
+</style>
+</head>
+<body>
+
+<div class="app" id="app" data-theme="dark">
+  <div class="bar">
+    <div class="bar__t"><b>Thinking Effort</b> · 控件原型</div>
+    <div class="bar__r">
+      <div class="detect" id="detect"><span class="detect__d"></span><span id="detectTx"></span></div>
+      <div class="seg" id="seg">
+        <button data-t="light">Light</button>
+        <button data-t="dark" class="on">Dark</button>
+      </div>
+      <label class="sw"><input type="checkbox" id="rm"><i></i>减弱动效</label>
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="composer">
+
+      <!-- conversation.input.overlay：模型选择（演示自动检测用） -->
+      <div class="pop menu" id="menu" role="listbox" aria-label="选择模型">
+        <div id="menuList"></div>
+      </div>
+
+      <!-- conversation.input.overlay：思考强度 -->
+      <div class="pop card" id="card" role="dialog" aria-label="思考强度">
+        <div class="card__hd">
+          <span class="card__lb">Effort</span>
+          <span class="card__tr" id="tier">Ultracode</span>
+          <button class="card__hp" aria-label="说明">?
+            <span>档位表由当前模型自报，档位越高推理越多——更慢，但复杂任务上通常更准。</span>
+          </button>
+        </div>
+        <div class="axis"><span>Faster</span><span>Smarter</span></div>
+        <div class="rail" id="rail">
+          <div class="rail__fill"></div>
+          <div class="rail__fd" id="fd"></div>
+          <div id="ticks"></div>
+          <button class="rail__th" id="thumb" role="slider"
+                  aria-valuemin="1" aria-valuemax="1" aria-valuenow="1" aria-valuetext=""></button>
+        </div>
+      </div>
+
+      <div class="editor">输入消息…</div>
+
+      <div class="toolbar">
+        <button class="chip" id="modelBtn" aria-haspopup="listbox" aria-expanded="false">
+          <span class="chip__tx" id="modelTx">—</span>
+          <span class="chip__cv">
+            <svg width="9" height="9" viewBox="0 0 10 10" fill="none">
+              <path d="m2 4 3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </span>
+        </button>
+        <button class="chip chip--effort" id="effortBtn" aria-haspopup="dialog" aria-expanded="false">
+          <span class="chip__tx" id="effortTx">—</span>
+        </button>
+        <span class="spacer"></span>
+        <button class="send" aria-label="发送">
+          <svg width="12" height="12" viewBox="0 0 13 13" fill="none">
+            <path d="M6.5 11V2M6.5 2 2.6 6M6.5 2l3.9 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var app = $('app'), rail = $('rail'), fd = $('fd'), ticks = $('ticks'), thumb = $('thumb'),
+      card = $('card'), menu = $('menu'), modelBtn = $('modelBtn'), effortBtn = $('effortBtn'),
+      tierEl = $('tier');
+
+  /* ═══════ modelCatalog 模拟 ═══════
+     真实实现整段来自 ctx.remote.session.modelCatalog()
+     efforts 由模型适配器自报；UI 不硬编码档位数/档位名 */
+  var MODELS = [
+    { id:'deepseek-v4-ultracode', def:'high', efforts:[
+      {name:'Minimal'},{name:'Low'},{name:'Medium'},
+      {name:'High'},{name:'Extra High'},{name:'Ultracode'} ]},
+    { id:'deepseek-v4-reasoner', def:'medium', efforts:[
+      {name:'Minimal'},{name:'Low'},{name:'Medium'},{name:'High'},{name:'Extra High'} ]},
+    { id:'deepseek-v4-thinking', def:'on', efforts:[ {name:'Thinking'} ]},
+    { id:'deepseek-v4-flash', def:null, efforts:[] }
+  ];
+
+  var model = MODELS[0], efforts = model.efforts;
+  var idx = 0, p = 0;                  // idx = 吸附到的档；p = 连续位置
+  var dragging = false, travel = 220;
+  var commitT = null, swapT = null;
+
+  function supports(m) { return m.efforts.length >= 2 }
+  function defIndexOf(m) { var i = 0;
+    m.efforts.forEach(function (e, k) { if (e.name.toLowerCase().replace(/ /g,'') === m.def) i = k });
+    return i }
+
+  /* ── 尺寸：算出滑块行程，供 --travel 使用 ── */
+  function measure() {
+    var w = rail.clientWidth;
+    if (!w) return false;
+    travel = Math.max(40, w - 26);
+    rail.style.setProperty('--travel', travel + 'px');
+    return true;
+  }
+
+  /* ── 5 排方块阵列 + 随机散点（用固定种子，重绘不乱跳） ── */
+  var rngState = 0x2f6e2b1;
+  function rnd() {                                   // mulberry32
+    rngState |= 0; rngState = rngState + 0x6D2B79F5 | 0;
+    var t = Math.imul(rngState ^ rngState >>> 15, 1 | rngState);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  }
+  var ROWS = 5, CELL = 3, GAP = 2;
+
+  function buildField() {
+    if (!travel) return;
+    var inner = travel + 26 - 8;                     // 减去 field 的左右 inset
+    var cols = Math.floor((inner + GAP) / (CELL + GAP));
+    if (cols < 4) cols = 4;
+    fd.style.gridTemplateRows = 'repeat(' + ROWS + ',' + CELL + 'px)';
+    fd.style.gridTemplateColumns = 'repeat(' + cols + ',' + CELL + 'px)';
+
+    rngState = 0x2f6e2b1;                            // 固定种子 → 每次重绘同一图案
+    var buf = '';
+    for (var c = 0; c < cols; c++) {
+      for (var r = 0; r < ROWS; r++) {
+        var sk = rnd() < 0.22;                       // 约 22% 的格子参与闪烁
+        if (sk) {
+          buf += '<i class="sk" style="--d:' + (2.6 + rnd() * 2.6).toFixed(2) + 's;' +
+                 '--dl:' + (-rnd() * 5).toFixed(2) + 's"></i>';
+        } else {
+          buf += '<i></i>';
+        }
+      }
+    }
+    fd.innerHTML = buf;
+  }
+
+  function buildTicks() {
+    ticks.innerHTML = '';
+    efforts.forEach(function (e, i) {
+      var t = document.createElement('div');
+      t.className = 'rail__tk';
+      t.style.setProperty('--t', String(efforts.length > 1 ? i / (efforts.length - 1) : 0));
+      t.title = e.name;
+      ticks.appendChild(t);
+    });
+  }
+
+  /* ── 同步 ── */
+  function paint(commit) {
+    var n = efforts.length;
+    if (!supports(model)) return;
+
+    rail.style.setProperty('--p', String(p));
+    var isMax = idx === n - 1;
+    tile();
+
+    var el = efforts[idx];
+    setTier(el.name, false);
+    /* 只有最高档染品牌色；其余档（含默认档）一律原色 */
+    tierEl.classList.toggle('is-max', isMax);
+
+    thumb.setAttribute('aria-valuemax', String(n));
+    thumb.setAttribute('aria-valuenow', String(idx + 1));
+    thumb.setAttribute('aria-valuetext', el.name + '，第 ' + (idx + 1) + ' 档，共 ' + n + ' 档');
+
+    if (commit) { clearTimeout(commitT); commitT = setTimeout(function () {
+      /* 真实实现：await ctx.remote.session.selectModel({...reasoningEffort})
+         下游对不支持档位是 reject（不 clamp）→ 回滚 p/idx 并抖动 */
+    }, 200); }
+  }
+
+  function tile() {
+    var isMax = idx === efforts.length - 1;
+    rail.classList.toggle('is-max', isMax);
+    Array.prototype.forEach.call(ticks.children, function (t, i) {
+      t.classList.toggle('on', i <= idx);
+      t.style.setProperty('--t', String(efforts.length > 1 ? i / (efforts.length - 1) : 0));
+    });
+  }
+
+  function setTier(name, instant) {
+    $('effortTx').textContent = name;          // 工具行永远跟手
+    if (tierEl.textContent === name) return;
+    if (instant || dragging) { tierEl.textContent = name; return; }
+    clearTimeout(swapT);
+    tierEl.classList.add('swap');
+    swapT = setTimeout(function () {
+      tierEl.textContent = name;
+      tierEl.classList.remove('swap');
+    }, 90);
+  }
+
+  /* ── 位置 ↔ 档位 ── */
+  function pFromX(x) {
+    var r = rail.getBoundingClientRect();
+    var t = Math.max(40, r.width - 26);
+    return Math.min(1, Math.max(0, (x - r.left - 13) / t));
+  }
+  function nearest(val) {
+    var n = efforts.length;
+    return Math.min(n - 1, Math.max(0, Math.round(val * (n - 1))));
+  }
+
+  /* ── 指针：拖动时连续跟随，松手优雅吸附 ── */
+  rail.addEventListener('pointerdown', function (ev) {
+    if (!supports(model)) return;
+    dragging = true; rail.classList.add('is-drag');
+    try { rail.setPointerCapture(ev.pointerId) } catch (e) {}
+    p = pFromX(ev.clientX); idx = nearest(p);
+    paint(false);
+    ev.preventDefault();
+  });
+  rail.addEventListener('pointermove', function (ev) {
+    if (!dragging) return;
+    var np = pFromX(ev.clientX), ni = nearest(np);
+    if (Math.abs(np - p) < 0.002 && ni === idx) return;
+    p = np; idx = ni;
+    paint(false);
+  });
+  function endDrag() {
+    if (!dragging) return;
+    dragging = false;
+    rail.classList.remove('is-drag');
+    /* 移除 is-drag 的同一帧里改 --p → 过渡重新生效，滑块自己滑进档位 */
+    p = efforts.length > 1 ? idx / (efforts.length - 1) : 0;
+    paint(true);
+  }
+  rail.addEventListener('pointerup', endDrag);
+  rail.addEventListener('pointercancel', endDrag);
+
+  /* ── 键盘 ── */
+  thumb.addEventListener('keydown', function (ev) {
+    if (!supports(model)) return;
+    var n = efforts.length, hit = true;
+    switch (ev.key) {
+      case 'ArrowLeft': case 'ArrowDown': idx = Math.max(0, idx - 1); break;
+      case 'ArrowRight': case 'ArrowUp':  idx = Math.min(n - 1, idx + 1); break;
+      case 'Home': idx = 0; break;
+      case 'End':  idx = n - 1; break;
+      case 'Escape': closeCard(); effortBtn.focus(); return;
+      default: hit = false;
+    }
+    if (hit) { p = idx / (n - 1); paint(true); ev.preventDefault() }
+  });
+
+  /* ── 浮层 ── */
+  function openCard(o) {
+    card.classList.toggle('is-open', o);
+    effortBtn.setAttribute('aria-expanded', String(o));
+    effortBtn.classList.toggle('is-open', o);
+    if (o) setTimeout(function () { thumb.focus() }, 50);
+  }
+  function closeCard() { openCard(false) }
+  function openMenu(o) { menu.classList.toggle('is-open', o); modelBtn.setAttribute('aria-expanded', String(o)) }
+
+  /* ── 模型菜单 ── */
+  function badge(m) {
+    var n = m.efforts.length;
+    if (n >= 2) return '<span class="menu__b">' + n + ' 档</span>';
+    if (n === 1) return '<span class="menu__b none">单档</span>';
+    return '<span class="menu__b none">不支持</span>';
+  }
+  function buildMenu() {
+    var l = $('menuList'); l.innerHTML = '';
+    MODELS.forEach(function (m, i) {
+      var b = document.createElement('button');
+      b.className = 'menu__i'; b.setAttribute('role', 'option');
+      b.setAttribute('aria-selected', String(m === model));
+      b.innerHTML = '<span class="menu__ck"><svg width="11" height="11" viewBox="0 0 12 12" fill="none">' +
+        '<path d="m2.5 6.2 2.3 2.3 4.7-4.9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span>' +
+        '<span class="menu__n">' + m.id + '</span>' + badge(m);
+      b.addEventListener('click', function () { pickModel(i) });
+      l.appendChild(b);
+    });
+  }
+  function pickModel(i) {
+    model = MODELS[i]; efforts = model.efforts;
+    idx = defIndexOf(model);
+    p = efforts.length > 1 ? idx / (efforts.length - 1) : 0;
+    $('modelTx').textContent = model.id;
+    buildMenu(); openMenu(false);
+
+    if (!supports(model)) {                    // 自动检测 → 收起
+      effortBtn.classList.add('is-gone');
+      rail.classList.remove('is-max');
+      rail.style.setProperty('--p', '0');
+      closeCard(); detectState(); return;
+    }
+    effortBtn.classList.remove('is-gone');
+    buildTicks(); buildField();
+    rail.classList.remove('is-max');
+    tile(); paint(false); detectState();
+  }
+
+  function detectState() {
+    var n = model.efforts.length, d = $('detect');
+    d.classList.toggle('off', n < 2);
+    $('detectTx').innerHTML = n >= 2
+      ? '自动检测：<em>' + model.id + '</em> · ' + n + ' 档'
+      : n === 1 ? '自动检测：<em>' + model.id + '</em> · 仅 1 档，控件已收起'
+                : '自动检测：<em>' + model.id + '</em> · 未申报档位，控件已收起';
+  }
+
+  /* ── 开关与关闭 ── */
+  modelBtn.addEventListener('click', function (ev) {
+    ev.stopPropagation(); closeCard(); openMenu(!menu.classList.contains('is-open'));
+  });
+  effortBtn.addEventListener('click', function (ev) {
+    ev.stopPropagation(); openMenu(false); openCard(!card.classList.contains('is-open'));
+  });
+  card.addEventListener('click', function (ev) { ev.stopPropagation() });
+  menu.addEventListener('click', function (ev) { ev.stopPropagation() });
+  document.addEventListener('click', function () { closeCard(); openMenu(false) });
+  document.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Escape') { closeCard(); openMenu(false) }
+  });
+
+  $('seg').addEventListener('click', function (ev) {
+    var b = ev.target.closest('button'); if (!b) return;
+    app.setAttribute('data-theme', b.dataset.t);
+    Array.prototype.forEach.call(this.children, function (x) { x.classList.toggle('on', x === b) });
+  });
+  $('rm').addEventListener('change', function () { app.classList.toggle('reduced', this.checked) });
+
+  if (window.ResizeObserver) new ResizeObserver(function () {
+    if (measure() && supports(model)) { buildField(); tile() }
+  }).observe(rail);
+  window.addEventListener('resize', function () {
+    if (measure() && supports(model)) { buildField(); tile() }
+  });
+
+  /* ── 启动 ── */
+  buildMenu();
+  $('modelTx').textContent = model.id;
+  idx = defIndexOf(model);
+  buildTicks();
+  requestAnimationFrame(function () {
+    measure();
+    buildField();
+    p = idx / (efforts.length - 1);
+    paint(false); tile(); detectState();
+    /* 自演示：先展开（停在模型默认档，档位名应为原色），再把档位滑到最高 ——
+       顺带展示吸附过渡 + 刻度淡出 + 方块阵列自右向左缓缓铺开 */
+    setTimeout(function () {
+      openCard(true);
+      setTimeout(function () {
+        idx = efforts.length - 1;
+        p = 1;
+        paint(false);
+      }, 900);
+    }, 400);
+  });
+})();
+</script>
+</body>
+</html>

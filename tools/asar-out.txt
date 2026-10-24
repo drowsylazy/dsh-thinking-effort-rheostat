@@ -1,0 +1,171 @@
+
+############ dsh-client-ui-conversation
+  name    : @deepseek-ai/dsh-client-ui-conversation@0.2.0-rc.2
+  main    : "lib/index.js"
+  exports : {".":{"types":"./lib/types/index.d.ts","default":"./lib/index.js"},"./client":{"types":"./lib/types/client/index.d.ts","default":"./lib/client.js"},"./src/*":"./src/*","./package.json":"./package.json"}
+  module  : undefined
+  browser : undefined
+  files   : ["lib/index.js","lib/client.js","lib/types/**/*.d.ts"]
+  type    : "module"
+  peers   : {"@deepseek-ai/cordis":"~4.0.4"}
+  deps    : {"@deepseek-ai/schemastery":"~3.18.4"}
+  scripts : undefined
+  dsh     : {
+  "client": {
+    "inject": [
+      "@deepseek-ai/dsh-api-session-controller",
+      "@deepseek-ai/dsh-client-file-upload",
+      "@deepseek-ai/dsh-client-locale",
+      "@deepseek-ai/dsh-client-ui-layout",
+      "@deepseek-ai/dsh-client-ui-renderer",
+      "@deepseek-ai/dsh-client-ui-session",
+      "@deepseek-ai/dsh-client-ui-settings",
+      "@deepseek-ai/dsh-client-ui-workspace"
+    ],
+    "platform": "web"
+  }
+}
+  DIR     : ["LICENSE","README.i18n.yaml","README.md","README.zh.md","lib/","package.json"]
+
+############ dsh-client-ui-model-selection
+  name    : @deepseek-ai/dsh-client-ui-model-selection@0.2.0-rc.2
+  main    : "lib/index.js"
+  exports : {".":{"types":"./lib/types/index.d.ts","default":"./lib/index.js"},"./client":{"types":"./lib/types/client/index.d.ts","default":"./lib/client.js"},"./src/*":"./src/*","./package.json":"./package.json"}
+  module  : undefined
+  browser : undefined
+  files   : ["lib/index.js","lib/client.js","lib/types/**/*.d.ts"]
+  type    : "module"
+  peers   : {"@deepseek-ai/cordis":"~4.0.4"}
+  deps    : undefined
+  scripts : undefined
+  dsh     : {
+  "client": {
+    "inject": [
+      "@deepseek-ai/dsh-api-session-controller",
+      "@deepseek-ai/dsh-client-locale",
+      "@deepseek-ai/dsh-client-ui-commands",
+      "@deepseek-ai/dsh-api-remotes"
+    ],
+    "platform": "web"
+  }
+}
+  DIR     : ["LICENSE","README.i18n.yaml","README.md","README.zh.md","lib/","package.json"]
+
+############ dsh-client-ui-settings-general
+  name    : @deepseek-ai/dsh-client-ui-settings-general@0.2.0-rc.2
+  main    : "lib/index.js"
+  exports : {".":{"types":"./lib/types/index.d.ts","default":"./lib/index.js"},"./client":{"types":"./lib/types/client/index.d.ts","default":"./lib/client.js"},"./types":{"types":"./lib/types/types.d.ts"},"./src/*":"./src/*","./package.json":"./package.json"}
+  module  : undefined
+  browser : undefined
+  files   : ["lib/index.js","lib/client.js","lib/types/**/*.d.ts"]
+  type    : "module"
+  peers   : {"@deepseek-ai/cordis":"~4.0.4"}
+  deps    : {"@deepseek-ai/schemastery":"~3.18.4"}
+  scripts : undefined
+  dsh     : {
+  "client": {
+    "inject": [
+      "@deepseek-ai/dsh-client-ui-settings",
+      "@deepseek-ai/dsh-client-locale",
+      "@deepseek-ai/dsh-client-connection",
+      "@deepseek-ai/dsh-api-remotes",
+      "@deepseek-ai/dsh-client-ui-sidebar",
+      "@deepseek-ai/dsh-client-shortcuts"
+    ],
+    "platform": "web"
+  }
+}
+  DIR     : ["LICENSE","README.i18n.yaml","README.md","README.zh.md","lib/","package.json"]
+
+############ dsh-client-ui-chat
+  name    : @deepseek-ai/dsh-client-ui-chat@0.2.0-rc.2
+  main    : "lib/index.js"
+  exports : {".":{"types":"./lib/types/index.d.ts","default":"./lib/index.js"},"./client":{"types":"./lib/types/client/index.d.ts","default":"./lib/client.js"},"./src/*":"./src/*","./package.json":"./package.json"}
+  module  : undefined
+  browser : undefined
+  files   : ["lib/index.js","lib/client.js","lib/types/**/*.d.ts"]
+  type    : "module"
+  peers   : {"@deepseek-ai/cordis":"~4.0.4"}
+  deps    : {"@deepseek-ai/schemastery":"~3.18.4"}
+  scripts : undefined
+  dsh     : {
+  "client": {
+    "inject": [
+      "@deepseek-ai/dsh-api-session-controller",
+      "@deepseek-ai/dsh-api-workspace-controller",
+      "@deepseek-ai/dsh-client-locale",
+      "@deepseek-ai/dsh-client-ui-conversation",
+      "@deepseek-ai/dsh-client-ui-input-trigger",
+      "@deepseek-ai/dsh-client-ui-layout",
+      "@deepseek-ai/dsh-client-ui-renderer",
+      "@deepseek-ai/dsh-client-ui-session",
+      "@deepseek-ai/dsh-client-ui-settings",
+      "@deepseek-ai/dsh-client-ui-sidebar-right",
+      "@deepseek-ai/dsh-client-ui-workspace"
+    ],
+    "platform": "web"
+  }
+}
+  DIR     : ["LICENSE","README.i18n.yaml","README.md","README.zh.md","lib/","package.json"]
+
+############ dsh-client-ui-theme
+  name    : @deepseek-ai/dsh-client-ui-theme@0.2.0-rc.2
+  main    : "lib/index.js"
+  exports : {".":{"types":"./lib/types/index.d.ts","default":"./lib/index.js"},"./client":{"types":"./lib/types/client/index.d.ts","default":"./lib/client.js"},"./src/*":"./src/*","./package.json":"./package.json","./brand-font.css":"./lib/styles/brand-font.css"}
+  module  : undefined
+  browser : undefined
+  files   : ["lib/index.js","lib/client.js","lib/styles","lib/types/**/*.d.ts"]
+  type    : "module"
+  peers   : {"@deepseek-ai/cordis":"~4.0.4"}
+  deps    : {"@deepseek-ai/schemastery":"~3.18.4"}
+  scripts : undefined
+  dsh     : {
+  "client": {
+    "inject": [
+      "@deepseek-ai/dsh-client-connection",
+      "@deepseek-ai/dsh-client-locale",
+      "@deepseek-ai/dsh-client-ui-renderer",
+      "@deepseek-ai/dsh-client-ui-settings",
+      "@deepseek-ai/dsh-api-remotes"
+    ],
+    "platform": "web",
+    "immediately": true
+  }
+}
+  DIR     : ["LICENSE","README.i18n.yaml","README.md","README.zh.md","lib/","package.json"]
+
+############ dsh-client-hmr
+  name    : @deepseek-ai/dsh-client-hmr@0.2.0-rc.2
+  main    : "lib/index.js"
+  exports : {".":{"types":"./lib/types/index.d.ts","default":"./lib/index.js"},"./invariant":{"types":"./lib/types/invariant.d.ts","default":"./lib/invariant.js"},"./client":{"types":"./lib/types/client/index.d.ts","default":"./lib/client.js"},"./src/*":"./src/*","./package.json":"./package.json"}
+  module  : undefined
+  browser : undefined
+  files   : ["lib/index.js","lib/invariant.js","lib/client.js","lib/types/**/*.d.ts"]
+  type    : "module"
+  peers   : {"@deepseek-ai/cordis":"~4.0.4"}
+  deps    : {"@deepseek-ai/schemastery":"~3.18.4"}
+  scripts : undefined
+  dsh     : {
+  "client": {
+    "inject": [
+      "@deepseek-ai/dsh-client-modules"
+    ],
+    "platform": "web",
+    "immediately": true
+  }
+}
+  DIR     : ["LICENSE","README.i18n.yaml","README.md","README.zh.md","lib/","package.json"]
+
+############ dsh-skill-badge
+  name    : @deepseek-ai/dsh-skill-badge@0.2.0-rc.2
+  main    : "lib/index.js"
+  exports : {".":{"types":"./lib/types/index.d.ts","default":"./lib/index.js"},"./package.json":"./package.json"}
+  module  : undefined
+  browser : undefined
+  files   : ["lib/index.js","assets","lib/types/**/*.d.ts"]
+  type    : "module"
+  peers   : {"@deepseek-ai/dsh-skill":"0.2.0-rc.2","@deepseek-ai/cordis":"~4.0.4"}
+  deps    : undefined
+  scripts : undefined
+  dsh     : undefined
+  DIR     : ["LICENSE","README.i18n.yaml","README.md","README.zh.md","assets/","lib/","package.json"]

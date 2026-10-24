@@ -1,0 +1,23 @@
+{
+  "name": "@local/dsh-thinking-effort-rheostat",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Thinking-effort rheostat for the composer: a slider over the model adapter's own reasoning-effort levels.",
+  "type": "module",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ]
+    }
+  }
+}

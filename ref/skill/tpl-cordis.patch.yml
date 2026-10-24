@@ -1,0 +1,5 @@
+﻿--- /dsh/node_modules/@deepseek-ai/dsh-agent-preset/skills/cordis-plugin-development/templates/decoration/cordis.patch.yml  size=69 shown=69 ---
+- insert:
+    - id: my-decoration
+      name: '@local/my-decoration'
+
