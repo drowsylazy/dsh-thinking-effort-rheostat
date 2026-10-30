@@ -534,26 +534,21 @@ check('the trigger shows the level as text',
 check('the trigger text is the same value the accessible name carries',
   textOf(tree) !== '' && chipLabel(tree).indexOf(textOf(tree)) >= 0,
   'text=' + JSON.stringify(textOf(tree)) + ' aria=' + JSON.stringify(chipLabel(tree)));
-check('the trigger renders an icon', first(tree, 'te-chip').children.some(
-  (c) => c !== null && typeof c === 'object' && c.type === 'svg'));
-const chipIcon = first(tree, 'te-chipIcon');
-const chipChevron = first(tree, 'te-chipChevron');
-check('the effort icon is a horizontal slider, not three ascending bars',
-  chipIcon !== void 0 && chipIcon.props.fill === 'none' &&
-  findAll(chipIcon, (node) => node.type === 'rect').length === 1 &&
-  findAll(chipIcon, (node) => node.type === 'path').some((node) => node.props.d === 'M1.5 8h5m4 0h4'));
-check('the slider icon fits the composer type ramp',
-  chipIcon !== void 0 && chipIcon.props.width === 14 && chipIcon.props.height === 14);
-check('the trigger has a separate lightweight disclosure arrow',
-  chipChevron !== void 0 && chipChevron.props.width === 10 && chipChevron.props.height === 10);
-check('the trigger icons are decorative and cannot steal focus',
-  [chipIcon, chipChevron].every((icon) => icon !== void 0 &&
-    icon.props['aria-hidden'] === 'true' && icon.props.focusable === 'false'));
-check('the trigger groups slider, level text and disclosure in that order',
-  first(tree, 'te-chip').children.map((node) => node.props.className).join(',') ===
-    'te-chipIcon,te-chipLabel,te-chipChevron');
+const textTrigger = first(tree, 'te-chip');
+check('the text-only trigger renders no icon',
+  findAll(textTrigger, (node) => node.type === 'svg').length === 0);
+check('the trigger has exactly one level label, without decorative children',
+  textTrigger.children.length === 1 && textTrigger.children[0].props.className === 'te-chipLabel');
+check('the level label keeps the provider default instead of inventing a level',
+  textOf(first(tree, 'te-chipLabel')) === app.dictionary.zh['effort.providerDefault']);
+check('the retired disclosure arrow is not rendered',
+  first(tree, 'te-chipChevron') === void 0);
+check('the text-only entry keeps native keyboard button semantics',
+  textTrigger.type === 'button' && textTrigger.props.type === 'button' && textTrigger.props.tabIndex !== -1);
+check('the undecorated trigger still carries the popup state for assistive technology',
+  textTrigger.props['aria-haspopup'] === 'dialog' && textTrigger.props['aria-expanded'] === false);
 check('the full level remains in the tooltip when the visible label is truncated',
-  first(tree, 'te-chip').props.title === first(tree, 'te-chip').props['aria-label']);
+  textTrigger.props.title === textTrigger.props['aria-label']);
 none.dispose();
 
 currentState = stateWith({
@@ -1843,17 +1838,16 @@ const declareSuite = async () => {
       (sheet.match(/order:\s*[2-9]/g) ?? []).length === 0);
     check('the trigger is a 28px text button matching the model seat',
       chipRule !== null && /height:28px/.test(chipRule[1]) && /font-size:13px/.test(chipRule[1]));
-    check('the trigger has a subtle theme-token boundary, not a fixed-colour badge',
-      chipRule !== null && /border:1px solid var\(--dsw-alias-border-l1\)/.test(chipRule[1]) &&
-      /background:color-mix\(in srgb,var\(--dsw-alias-label-secondary\) 4%,transparent\)/.test(chipRule[1]));
-    check('the control can yield space without crushing either icon',
-      chipRule !== null && /flex:0 1 auto/.test(chipRule[1]) && /min-width:54px/.test(chipRule[1]));
+    check('the text entry has no resting background or border',
+      chipRule !== null && /background:transparent/.test(chipRule[1]) && /border:0/.test(chipRule[1]));
+    check('the compact text target can yield space in the composer row',
+      chipRule !== null && /flex:0 1 auto/.test(chipRule[1]) && /min-width:40px/.test(chipRule[1]));
     check('a long level label can shrink and ellipsize without wrapping',
       /\.te-chipLabel\{[^}]*text-overflow:ellipsis[^}]*white-space:nowrap[^}]*min-width:0[^}]*flex:0 1 auto/.test(sheet));
-    check('the disclosure follows the open state',
-      /\.te-chip\[aria-expanded=true\] \.te-chipChevron\{transform:rotate\(180deg\)/.test(sheet));
-    check('reduced motion turns off the new disclosure transition',
-      /prefers-reduced-motion:reduce[^\n]*\.te-chip,\.te-chipChevron[^\n]*transition:none/.test(sheet));
+    check('the removed icons leave no stale styling or animated arrow',
+      !/te-chipIcon|te-chipChevron|\.te-chip svg/.test(sheet));
+    check('reduced motion turns off the text entry hover transition',
+      /prefers-reduced-motion:reduce[^\n]*\.te-chip,\.te-field[^\n]*transition:none/.test(sheet));
 
     /* Colour must match the seat it stands next to — and "match" is checked
        against the SHIPPED sheet, read from the asar, not against a snapshot of
@@ -1886,19 +1880,17 @@ const declareSuite = async () => {
         focus !== null && focus[1].indexOf(shipped.focusRing) >= 0,
         focus === null ? '' : focus[1]);
 
-      check('the icons inherit the text colour instead of setting their own',
-        /\.te-chip svg\{[^}]*color:inherit/.test(sheet) &&
-        !/\.te-chip svg\{[^}]*color:var\(/.test(sheet));
+      check('the text entry adds no pseudo-element icon or decoration',
+        !/\.te-chip(?:Label)?::(?:before|after)/.test(sheet));
 
       /* Geometry: the two sit on one line, so the box has to agree. */
       check('the trigger matches the shipped height', mine !== null && mine[1].indexOf('height:28px') >= 0);
       check('the trigger matches the shipped type ramp',
         mine !== null && /font-size:13px/.test(mine[1]) && /font-weight:400/.test(mine[1]) &&
         /line-height:20px/.test(mine[1]));
-      /* The new outlined icon/value/chevron group deliberately uses 6px rather
-         than the model seat's 4px so the two decorative glyphs do not crowd text. */
-      check('the slider control leaves balanced space around its label',
-        mine !== null && /gap:6px/.test(mine[1]), mine === null ? '' : mine[1]);
+      check('the single text label keeps balanced padding and a quiet rounded hover target',
+        mine !== null && /padding:0 8px/.test(mine[1]) && /border-radius:999px/.test(mine[1]),
+        mine === null ? '' : mine[1]);
       check('the trigger has no state-dependent colour',
         !/\.te-chip(Idle|On|Active)\{/.test(sheet));
     }

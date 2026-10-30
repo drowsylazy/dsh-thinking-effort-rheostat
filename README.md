@@ -44,7 +44,7 @@ dsh plugin --profile demo add link:.\dsh-thinking-effort-rheostat
 
 ## 使用
 
-插件管理与设置中的显示名称为 **`dsh-thinking-effort-rheostat`**。点击模型选择器旁的「滑块图标 + 当前档位」按钮，打开思考强度面板。
+插件管理与设置中的显示名称为 **`dsh-thinking-effort-rheostat`**。点击模型选择器旁的当前档位文字，打开思考强度面板。入口采用无图标、无边框的简洁文字样式。
 
 | 操作 | 效果 |
 | :-- | :-- |

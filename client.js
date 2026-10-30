@@ -271,27 +271,20 @@ window.__ModuleLoader__.load({
 		 * degrades the appearance instead of producing an unreadable control.
 		 * ------------------------------------------------------------------ */
 		const CSS = [
-			/* ---- trigger: one compact slider control, not a staircase readout ----
-			   Keep the model seat's 28px height, type ramp and text tone. A subtle
-			   token-only boundary groups our slider icon, active level and disclosure
-			   into ONE target instead of a loose icon/value beside the model name.
-			   The text can shrink; both icons keep their proportions. The full level
-			   remains in the accessible name and tooltip when the row is narrow.
-
-			   `order:1` keeps this cell after the model seat within the composer's
-			   shared flex row. No wrapper, external DOM writes or layout probing. */
-			".te-chip{box-sizing:border-box;border-radius:var(--dsw-radius-sm,8px);height:28px;",
+			/* ---- trigger: quiet, Claude-inspired text only ----
+			   The active level is the whole visual: no icon, chevron, outline or
+			   resting fill. A rounded hover surface marks the hit target without
+			   making another badge beside the model name. Preserve the host's type
+			   ramp and focus ring; keep the full value in the tooltip and aria name.
+			   `order:1` retains placement after the model seat in the shared row. */
+			".te-chip{box-sizing:border-box;border-radius:999px;height:28px;",
 			"max-width:min(160px,32cqw);padding:0 8px;",
 			"color:var(--dsw-alias-label-secondary);",
-			"cursor:pointer;background:color-mix(in srgb,var(--dsw-alias-label-secondary) 4%,transparent);",
-			"border:1px solid var(--dsw-alias-border-l1);outline:none;order:1;",
-			"align-items:center;gap:6px;display:flex;flex:0 1 auto;min-width:54px;",
+			"cursor:pointer;background:transparent;border:0;outline:none;order:1;",
+			"align-items:center;justify-content:center;display:flex;flex:0 1 auto;min-width:40px;",
 			"font-family:inherit;font-size:13px;font-weight:400;line-height:20px;",
 			"transition:background .16s ease}",
-			".te-chip svg{display:block;flex:none;color:inherit}",
 			".te-chipLabel{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:0 1 auto}",
-			".te-chipChevron{opacity:.65;transition:transform .16s ease}",
-			".te-chip[aria-expanded=true] .te-chipChevron{transform:rotate(180deg)}",
 			".te-chip:hover:not(:disabled),.te-chip[aria-expanded=true]{background:var(--dsw-alias-interactive-bg-hover)}",
 			".te-chip:focus-visible{box-shadow:0 0 0 2px var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary))}",
 
@@ -566,7 +559,7 @@ window.__ModuleLoader__.load({
 			"font-family:inherit;font-size:11px;font-weight:500;line-height:22px;cursor:pointer;outline:none}",
 			".te-btnGhost:hover,.te-btnGhost:focus-visible{background:var(--dsw-alias-interactive-bg-hover)}",
 
-			"@media (prefers-reduced-motion:reduce){.te-cellBlink{animation:none}.te-chip,.te-chipChevron,.te-field,.te-thumb,.te-fill,.te-ghost,.te-ghostFill{transition:none}}"
+			"@media (prefers-reduced-motion:reduce){.te-cellBlink{animation:none}.te-chip,.te-field,.te-thumb,.te-fill,.te-ghost,.te-ghostFill{transition:none}}"
 		].join("");
 
 		/**
@@ -2491,9 +2484,8 @@ window.__ModuleLoader__.load({
 					footer
 				);
 
-				/* Keep the current level as the sole readout. The outlined horizontal
-				   slider describes the action without the old three-bar staircase;
-				   the disclosure arrow identifies the popover. Both are decorative. */
+				/* A text-only entry: the active level is the sole visible child.
+				   Keep the existing button and popover behavior, without decoration. */
 				const chipLabel = info.display.length > 0 ? info.display : t("effort.providerDefault");
 				return h(
 					Fragment,
@@ -2511,42 +2503,7 @@ window.__ModuleLoader__.load({
 							title: t("label") + "：" + chipLabel,
 							onClick: () => setOpen(!open)
 						},
-						h(
-							"svg",
-							{
-								className: "te-chipIcon",
-								viewBox: "0 0 16 16",
-								width: 14,
-								height: 14,
-								fill: "none",
-								stroke: "currentColor",
-								strokeWidth: 1.4,
-								strokeLinecap: "round",
-								strokeLinejoin: "round",
-								"aria-hidden": "true",
-								focusable: "false"
-							},
-							h("path", { d: "M1.5 8h5m4 0h4" }),
-							h("rect", { x: 6.5, y: 4.5, width: 4, height: 7, rx: 1.4 })
-						),
-						h("span", { className: "te-chipLabel" }, chipLabel),
-						h(
-							"svg",
-							{
-								className: "te-chipChevron",
-								viewBox: "0 0 12 12",
-								width: 10,
-								height: 10,
-								fill: "none",
-								stroke: "currentColor",
-								strokeWidth: 1.4,
-								strokeLinecap: "round",
-								strokeLinejoin: "round",
-								"aria-hidden": "true",
-								focusable: "false"
-							},
-							h("path", { d: "m3 4.5 3 3 3-3" })
-						)
+						h("span", { className: "te-chipLabel" }, chipLabel)
 					),
 					panel
 				);
