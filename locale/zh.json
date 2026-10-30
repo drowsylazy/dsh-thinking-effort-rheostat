@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "dsh-thinking-effort-rheostat",
+    "description": "DeepSeek Harness 的思考强度滑块，支持点击、拖拽和键盘切换模型推理档位。"
+  }
+}

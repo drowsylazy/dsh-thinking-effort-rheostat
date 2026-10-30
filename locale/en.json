@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "dsh-thinking-effort-rheostat",
+    "description": "A thinking-effort slider for DeepSeek Harness. Switch the model's reasoning levels with click, drag, or keyboard."
+  }
+}

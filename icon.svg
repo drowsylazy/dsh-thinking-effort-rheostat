@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Thinking-effort slider</title>
+  <rect x="4" y="4" width="56" height="56" rx="16" fill="#EEF3FF"/>
+  <rect x="12" y="28" width="40" height="8" rx="4" fill="#CBD9FD"/>
+  <rect x="12" y="28" width="24" height="8" rx="4" fill="#5686FE"/>
+  <path d="M16 41v3m8-3v3m8-3v3m8-3v3m8-3v3" fill="none" stroke="#5686FE" stroke-width="2" stroke-linecap="round"/>
+  <rect x="29" y="21" width="14" height="22" rx="5" fill="#FFFFFF" stroke="#5686FE" stroke-width="2"/>
+  <path d="M34 27v10m4-10v10" fill="none" stroke="#CBD9FD" stroke-width="2" stroke-linecap="round"/>
+</svg>

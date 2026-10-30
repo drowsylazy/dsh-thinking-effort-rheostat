@@ -6,7 +6,7 @@
 模仿 Claude Desktop 的推理强度控件，为每一个模型调出它的全部档位。
 
 [![License](https://img.shields.io/badge/license-MIT-2563eb)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-296%20passing-0ea5e9)](#安装)
+[![Tests](https://img.shields.io/badge/tests-350%20passing-0ea5e9)](#安装)
 
 **[安装](#安装)** &nbsp;·&nbsp; **[使用](#使用)**
 
@@ -44,6 +44,8 @@ dsh plugin --profile demo add link:.\dsh-thinking-effort-rheostat
 
 ## 使用
 
+插件管理与设置中的显示名称为 **`dsh-thinking-effort-rheostat`**，输入框入口仍为「思考强度」。
+
 | 操作 | 效果 |
 | :-- | :-- |
 | 拖动 / 点击刻度 / 点击轨道 | 换档——越高越慢，推理越多，复杂任务上通常更准 |
@@ -51,6 +53,6 @@ dsh plugin --profile demo add link:.\dsh-thinking-effort-rheostat
 | 底部「一键启用 · 自定义…」 | 给没有档位的模型开档 |
 | 底部「撤销启用」 | 还原，钥匙弹回初始位 |
 
-## 📄 许可证
+## 许可证
 
 本项目基于 [MIT License](LICENSE) 开源。
