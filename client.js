@@ -271,40 +271,27 @@ window.__ModuleLoader__.load({
 		 * degrades the appearance instead of producing an unreadable control.
 		 * ------------------------------------------------------------------ */
 		const CSS = [
-			/* ---- trigger: a text button showing the ACTIVE LEVEL ----
-			   The level name is the label now. That only became possible once this
-			   plugin took the level readout away from the shipped model seat: before
-			   that, "Max" here and "· Max" there were the same word twice.
+			/* ---- trigger: one compact slider control, not a staircase readout ----
+			   Keep the model seat's 28px height, type ramp and text tone. A subtle
+			   token-only boundary groups our slider icon, active level and disclosure
+			   into ONE target instead of a loose icon/value beside the model name.
+			   The text can shrink; both icons keep their proportions. The full level
+			   remains in the accessible name and tooltip when the row is narrow.
 
-			   Every value is copied from that seat, value for value, so the two
-			   read as one control group instead of two widgets:
-			     text colour      --dsw-alias-label-secondary   (the trigger's own)
-			     hover            background ONLY — the shipped trigger does not
-			                              change its text colour on hover, and doing
-			                              so here was the visible mismatch
-			     focus ring       --dsw-focus-ring-color, falling back to the same
-			                              business accent the seat uses
-			     geometry         28px tall, 13px/400, line-height 20px, radius-sm,
-			                              gap 4px, 8px left padding
-			   The icons inherit, so they are deliberately NOT given a colour of
-			   their own. `label-caption` was wrong: that is the tone the shipped
-			   seat reserves for its effort SUFFIX and chevron, which this plugin
-			   hides — using it made the whole control read a shade too light
-			   against the model name it sits beside.
-
-			   `order:1` is what puts it to the RIGHT of the model: this entry
-			   renders BEFORE `conversation.input.model` inside the shipped flex
-			   container (`.standardControls`, display:flex), and both default to
-			   order 0, so without this the control would sit on the model's left. */
+			   `order:1` keeps this cell after the model seat within the composer's
+			   shared flex row. No wrapper, external DOM writes or layout probing. */
 			".te-chip{box-sizing:border-box;border-radius:var(--dsw-radius-sm,8px);height:28px;",
-			"max-width:min(150px,32cqw);padding:0 8px 0 8px;",
+			"max-width:min(160px,32cqw);padding:0 8px;",
 			"color:var(--dsw-alias-label-secondary);",
-			"cursor:pointer;background:0 0;border:none;outline:none;order:1;",
-			"align-items:center;gap:4px;display:flex;flex:none;min-width:0;",
-			"font-size:13px;font-weight:400;line-height:20px;",
+			"cursor:pointer;background:color-mix(in srgb,var(--dsw-alias-label-secondary) 4%,transparent);",
+			"border:1px solid var(--dsw-alias-border-l1);outline:none;order:1;",
+			"align-items:center;gap:6px;display:flex;flex:0 1 auto;min-width:54px;",
+			"font-family:inherit;font-size:13px;font-weight:400;line-height:20px;",
 			"transition:background .16s ease}",
 			".te-chip svg{display:block;flex:none;color:inherit}",
-			".te-chipLabel{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}",
+			".te-chipLabel{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:0 1 auto}",
+			".te-chipChevron{opacity:.65;transition:transform .16s ease}",
+			".te-chip[aria-expanded=true] .te-chipChevron{transform:rotate(180deg)}",
 			".te-chip:hover:not(:disabled),.te-chip[aria-expanded=true]{background:var(--dsw-alias-interactive-bg-hover)}",
 			".te-chip:focus-visible{box-shadow:0 0 0 2px var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary))}",
 
@@ -579,7 +566,7 @@ window.__ModuleLoader__.load({
 			"font-family:inherit;font-size:11px;font-weight:500;line-height:22px;cursor:pointer;outline:none}",
 			".te-btnGhost:hover,.te-btnGhost:focus-visible{background:var(--dsw-alias-interactive-bg-hover)}",
 
-			"@media (prefers-reduced-motion:reduce){.te-cellBlink{animation:none}.te-field,.te-thumb,.te-fill,.te-ghost,.te-ghostFill{transition:none}}"
+			"@media (prefers-reduced-motion:reduce){.te-cellBlink{animation:none}.te-chip,.te-chipChevron,.te-field,.te-thumb,.te-fill,.te-ghost,.te-ghostFill{transition:none}}"
 		].join("");
 
 		/**
@@ -2504,11 +2491,9 @@ window.__ModuleLoader__.load({
 					footer
 				);
 
-				/* The level name IS the trigger label. The shipped seat's own "· Max"
-				   suffix is hidden above, so this is the only readout of the active
-				   level and it lives exactly where the user looks for it. The small
-				   bars stay as a shape cue that this is the effort control and not a
-				   second model menu. */
+				/* Keep the current level as the sole readout. The outlined horizontal
+				   slider describes the action without the old three-bar staircase;
+				   the disclosure arrow identifies the popover. Both are decorative. */
 				const chipLabel = info.display.length > 0 ? info.display : t("effort.providerDefault");
 				return h(
 					Fragment,
@@ -2529,17 +2514,39 @@ window.__ModuleLoader__.load({
 						h(
 							"svg",
 							{
-								viewBox: "0 0 14 14",
-								width: 12,
-								height: 12,
+								className: "te-chipIcon",
+								viewBox: "0 0 16 16",
+								width: 14,
+								height: 14,
+								fill: "none",
+								stroke: "currentColor",
+								strokeWidth: 1.4,
+								strokeLinecap: "round",
+								strokeLinejoin: "round",
 								"aria-hidden": "true",
 								focusable: "false"
 							},
-							h("rect", { x: 1, y: 8.5, width: 3, height: 4.5, rx: 1.2, fill: "currentColor" }),
-							h("rect", { x: 5.5, y: 5, width: 3, height: 8, rx: 1.2, fill: "currentColor" }),
-							h("rect", { x: 10, y: 1.5, width: 3, height: 11.5, rx: 1.2, fill: "currentColor" })
+							h("path", { d: "M1.5 8h5m4 0h4" }),
+							h("rect", { x: 6.5, y: 4.5, width: 4, height: 7, rx: 1.4 })
 						),
-						h("span", { className: "te-chipLabel" }, chipLabel)
+						h("span", { className: "te-chipLabel" }, chipLabel),
+						h(
+							"svg",
+							{
+								className: "te-chipChevron",
+								viewBox: "0 0 12 12",
+								width: 10,
+								height: 10,
+								fill: "none",
+								stroke: "currentColor",
+								strokeWidth: 1.4,
+								strokeLinecap: "round",
+								strokeLinejoin: "round",
+								"aria-hidden": "true",
+								focusable: "false"
+							},
+							h("path", { d: "m3 4.5 3 3 3-3" })
+						)
 					),
 					panel
 				);
