@@ -111,6 +111,7 @@ function createRuntime() {
   function makeElement() {
     return {
       clientWidth: RAIL_WIDTH,
+      ownerDocument: browserDocument,
       style: {},
       focus() {},
       getBoundingClientRect: () => ({
@@ -266,6 +267,7 @@ function createRuntime() {
  * a real browser supplies one global.
  * ------------------------------------------------------------------ */
 const runtime = createRuntime();
+const browserDocument = { body: { teBody: true } };
 const browserWindow = {
   innerWidth: VIEWPORT_W,
   innerHeight: VIEWPORT_H,
@@ -292,6 +294,11 @@ function loadBundle() {
 function instantiate(spec, React, services) {
   const module = spec.factory((name) => {
     if (name === 'react') return React;
+    if (name === 'react-dom') return {
+      createPortal: (child, destination) => ({
+        type: 'test-portal', props: { destination }, children: [child]
+      })
+    };
     throw new Error('bundle required an unexpected module: ' + name);
   });
   const registered = {};
@@ -609,6 +616,9 @@ check('no panel before opening', first(tree, 'te-panel') === void 0);
 tree = openIt(six);
 const panel = first(tree, 'te-panel');
 check('opening renders the panel', panel !== void 0);
+const portal = findAll(tree, node => node.type === 'test-portal')[0];
+check('panel is a body portal, not a fixed child of the composer',
+  portal !== void 0 && portal.props.destination === browserDocument.body && first(portal, 'te-panel') === panel);
 check('panel is anchored fixed (survives the scroll container)',
   panel !== void 0 && panel.props.style !== void 0 &&
   typeof panel.props.style.left === 'string' && typeof panel.props.style.bottom === 'string',

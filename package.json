@@ -4,6 +4,10 @@
   "private": true,
   "description": "Thinking-effort rheostat for the composer: a slider over the model adapter's own reasoning-effort levels.",
   "type": "module",
+  "scripts": {
+    "test": "node tools/smoke.cjs && node tools/smoke-declare.mjs && node tools/check-metadata.mjs",
+    "test:browser": "node tools/browser/fixture.mjs"
+  },
   "exports": {
     ".": "./index.js",
     "./client": "./client.js",

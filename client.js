@@ -2,6 +2,7 @@ window.__ModuleLoader__.load({
 	id: "@local/dsh-thinking-effort-rheostat",
 	factory: (require) => {
 		const React = require("react");
+		const createPortal = require("react-dom").createPortal;
 		const h = React.createElement;
 		const Fragment = React.Fragment;
 		const useState = React.useState;
@@ -311,6 +312,7 @@ window.__ModuleLoader__.load({
 			   tools/contrast.js. On bg-layer-1 (#232324) the same accent reaches
 			   6.75:1, and light mode gets a plain white card. */
 			".te-panel{position:fixed;z-index:1100;box-sizing:border-box;width:" + PANEL_W + "px;",
+			"max-width:calc(100vw - 16px);",
 			"padding:13px 13px 12px;border-radius:var(--dsw-radius-md,12px);",
 			"background:var(--dsw-alias-bg-layer-1);border:.5px solid var(--dsw-alias-border-l2);",
 			"box-shadow:var(--dsw-elevation-prominent);color:var(--dsw-alias-label-primary);",
@@ -1416,9 +1418,12 @@ window.__ModuleLoader__.load({
 		 * The control.
 		 *
 		 * Trigger and panel are ONE component, registered in
-		 * `conversation.input.right` so it sits immediately LEFT of the shipped
-		 * model seat. The composer row is inside a scroll container, so the panel
-		 * is positioned `fixed` from the trigger's own rect.
+		 * `conversation.input.right` so it sits immediately AFTER the shipped
+		 * model seat. The active conversation's sticky composer uses
+		 * `will-change: transform`, which establishes a fixed containing block
+		 * even when its transform is `none`. Keep the trigger in the composer,
+		 * but portal the fixed panel to its document body: its viewport rect and
+		 * CSS positioning must use the same coordinate system in old and new chats.
 		 *
 		 * This plugin OWNS the effort control: the shipped model menu's own effort
 		 * row and the level suffix on its trigger are removed by
@@ -2417,7 +2422,9 @@ window.__ModuleLoader__.load({
 					) : null
 				);
 
-				const panel = !open || absent(anchor) ? null : h(
+				const ownerDocument = absent(chipRef.current) ? null : chipRef.current.ownerDocument;
+				const portalRoot = absent(ownerDocument) ? null : ownerDocument.body;
+				const panel = !open || absent(anchor) || absent(portalRoot) ? null : h(
 					"div",
 					{
 						className: panelClass,
@@ -2505,7 +2512,7 @@ window.__ModuleLoader__.load({
 						},
 						h("span", { className: "te-chipLabel" }, chipLabel)
 					),
-					panel
+					panel === null ? null : createPortal(panel, portalRoot)
 				);
 			};
 		}
@@ -2532,9 +2539,8 @@ window.__ModuleLoader__.load({
 					scope.effect(() => scope.locale.register(NS, DICT), "thinking-effort: dictionaries");
 					const models = scope.modelDirectories;
 					const directoryCache = new Map();
-					/* The entry renders nothing in the composer; it exists to carry the
-					   per-session `sessionId` that the rail's portal needs, and it rides
-					   the composer row that is always mounted for a live Session. */
+					/* One per-Session entry owns both the composer trigger and its
+					   body portal; React keeps their context and lifetime together. */
 					scope.slots.inject("conversation.input.right", () => scope.slots.register({
 						name: "conversation.input.right",
 						id: "thinking-effort",
