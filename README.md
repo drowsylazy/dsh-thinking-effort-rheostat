@@ -6,7 +6,7 @@
 模仿 Claude Desktop 的推理强度控件，为每一个模型调出它的全部档位。
 
 [![License](https://img.shields.io/badge/license-MIT-2563eb)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-362%20passing-0ea5e9)](#验证)
+[![Tests](https://img.shields.io/badge/tests-380%20passing-0ea5e9)](#验证)
 
 **[安装](#安装)** &nbsp;·&nbsp; **[使用](#使用)**
 
@@ -53,6 +53,12 @@ dsh plugin --profile demo add link:.\dsh-thinking-effort-rheostat
 | 底部「一键启用 · 自定义…」 | 给没有档位的模型开档 |
 | 底部「撤销启用」 | 还原，钥匙弹回初始位 |
 
+### 单档模型与「模型默认」
+
+模型没有配置默认档位时，滑块保留原生模型菜单中的「模型默认」选项。因此，即使 hy4 当前只公开 `high`，也可以在 **模型默认 ↔ High** 之间点击、拖动或用 Home / End 切换，不会卡在唯一的 High 刻度上。
+
+「模型默认」表示不发送 `reasoningEffort`，由提供商自行决定，**不等于关闭思考，也不保证比 High 更快**。它与模型明确提供的 `off` 是两个不同选项。插件不会因此给 hy4 添加网关未公开的 Low、Medium、Max 等档位；已有默认档位的模型也不会多出重复的默认刻度。原生档位使用适配器提供的 ID，不局限于 pi-ai 的七档词汇。
+
 ## 验证
 
 ```powershell
@@ -61,7 +67,7 @@ pnpm --dir tools/browser install --ignore-scripts
 pnpm test:browser
 ```
 
-362 项单元/元数据检查，以及 14 项真实 Chromium 布局与交互检查。详见[浏览器回归说明](tools/browser/README.md)。测试覆盖旧对话的 `will-change: transform` 定位容器：弹层经 React Portal 渲染到 document body，避免将视口坐标误当成输入区局部坐标；窄视口同时保留两侧安全边距。
+380 项单元/元数据检查，以及 21 项真实 Chromium 布局与交互检查（包括两条 hy4 路由、模型默认、显式 Off、非 pi-ai 原生档位 ID 和中英文标签）。详见[浏览器回归说明](tools/browser/README.md)。测试覆盖旧对话的 `will-change: transform` 定位容器：弹层经 React Portal 渲染到 document body，避免将视口坐标误当成输入区局部坐标；窄视口同时保留两侧安全边距。
 
 ## 许可证
 

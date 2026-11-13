@@ -165,8 +165,9 @@ window.__ModuleLoader__.load({
 				label: "思考强度",
 				"axis.faster": "更快",
 				"axis.smarter": "更聪明",
-				help: "档位由当前模型自己提供；没有档位的模型可以一键启用（推荐组合来自 models.dev，也可自定义）。档位越高，作答前投入的推理越多：更慢、思考 token 更多，复杂任务上通常更准。",
+				help: "档位由当前模型自己提供；没有档位的模型可以一键启用（推荐组合来自 models.dev，也可自定义）。档位越高，作答前投入的推理越多：更慢、思考 token 更多，复杂任务上通常更准。「模型默认」不发送推理强度参数，由提供商决定，并不等于关闭思考或保证更快。",
 				"effort.providerDefault": "模型默认",
+				"effort.providerDefaultHint": "不发送推理强度参数，由提供商自行决定；这不等于关闭思考。",
 				"state.failed": "当前模型不接受这个档位，已还原上一档",
 				"state.stranded": "当前档位已不可用，请重置为模型默认",
 				"state.undeclared": "该模型没有思考档位",
@@ -214,8 +215,9 @@ window.__ModuleLoader__.load({
 				label: "Effort",
 				"axis.faster": "Faster",
 				"axis.smarter": "Smarter",
-				help: "The levels come from the model itself; models without one can be enabled with one click (the suggestion comes from models.dev, or pick a custom set). A higher level spends more reasoning before answering: slower, more thinking tokens, usually more accurate on hard tasks.",
+				help: "The levels come from the model itself; models without one can be enabled with one click (the suggestion comes from models.dev, or pick a custom set). A higher level spends more reasoning before answering: slower, more thinking tokens, usually more accurate on hard tasks. Provider default omits the reasoning-effort parameter and lets the provider decide; it does not mean thinking is disabled or guarantee a faster response.",
 				"effort.providerDefault": "Provider default",
+				"effort.providerDefaultHint": "No reasoning-effort parameter is sent; the provider decides. This does not mean thinking is disabled.",
 				"state.failed": "This model does not accept that level — restored the previous one",
 				"state.stranded": "The current level is no longer available — reset it to the model default",
 				"state.undeclared": "This model has no thinking levels",
@@ -667,14 +669,15 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
-		 * Read the effort ladder for the current model.
+		 * Read the current model's native effort choices, including provider default.
 		 *
-		 * `declared` comes from the adapter; when it offers fewer than two levels
-		 * the Host is telling us the model has no adjustable capability, and the
-		 * control falls back to the shared ladder so the level can still be
-		 * requested (the Host validates it and rejects an unsupported one).
+		 * The shipped selector offers an omitted effort whenever the adapter has
+		 * no defaultEffort. Dropping that choice strands a one-level model such
+		 * as Hy4 on High: its only remaining stop is already selected. Mirror the
+		 * native choice with a CLIENT-ONLY null id, never a made-up wire effort.
+		 * Models with no ladder still draw an inert preview, not invented levels.
 		 */
-		function describeEffort(state) {
+		function describeEffort(state, t) {
 			const empty = {
 				offered: false, known: false, forced: false, ours: false,
 				activeKnown: false, activeOffered: false, activeId: null,
@@ -715,11 +718,18 @@ window.__ModuleLoader__.load({
 			   exactly ONE ladder CAN take it, so the threshold is zero — a
 			   single declared level is a real, submittable level. */
 			const forced = declared.length === 0;
-			/* A thin declared ladder falls back to the PREVIEW stops: they are a
-			   mirror of the default set, not real efforts. The control may swap
-			   in a chooser draft on top of this (`draftIds`), which is why the
-			   fallback must stay a plain array the control can replace. */
-			const efforts = forced ? PREVIEW_LEVELS : declared;
+			/* Only a missing ladder falls back to the inert preview. On a live
+			   ladder the provider-default stop matches the native model menu:
+			   omitting reasoningEffort lets the provider decide; it does NOT
+			   promise less reasoning or mean the adapter's explicit "off" level.
+			   A configured default already names a real stop, so do not duplicate
+			   it. The null id is private to this UI and is never submitted. */
+			const efforts = forced ? PREVIEW_LEVELS
+				: absent(defaultEffort) ? [{
+					id: null,
+					name: t("effort.providerDefault"),
+					description: t("effort.providerDefaultHint")
+				}, ...declared] : declared;
 
 			/* Whether this is the ladder the Host half manages. The fingerprint is
 			   the SHAPE a declaration takes, not one exact set: every id inside
@@ -744,6 +754,7 @@ window.__ModuleLoader__.load({
 
 			/* Match the active level; a forced ladder has no default to inherit. */
 			const activeId = absent(current.reasoningEffort) ? defaultEffort : current.reasoningEffort;
+			const effectiveId = absent(activeId) ? null : activeId;
 			let index = 0;
 			/* Whether the level the store holds is one this model actually offers.
 			   The two can disagree: a selection made against another model — or
@@ -759,10 +770,10 @@ window.__ModuleLoader__.load({
 			   offered — treating it as offered is what pinned the control to the
 			   top stop and made every press a no-op. */
 			let activeOffered = false;
-			if (activeId !== void 0 && !forced) {
+			if (!forced) {
 				for (let i = 0; i < efforts.length; i++) {
 					const level = efforts[i];
-					if (!absent(level) && level.id === activeId) {
+					if (!absent(level) && level.id === effectiveId) {
 						index = i;
 						activeOffered = true;
 					}
@@ -780,7 +791,10 @@ window.__ModuleLoader__.load({
 			   leftover from another model or another ladder. Claiming it would
 			   put the name of a level on the trigger that no request can carry,
 			   and would paint the control as the top tier. */
-			const activeKnown = activeId !== void 0 && activeOffered;
+			/* An omitted effort is also a known choice when the model offers
+			   provider default. This keeps a retained old High label from being
+			   mistaken for the active choice after the user returns to default. */
+			const activeKnown = activeOffered;
 			const level = efforts[index];
 			/* The retained name is a HOST fallback for the case where the model
 			   declares no ladder at all — but it also carries a level the model
@@ -1436,7 +1450,7 @@ window.__ModuleLoader__.load({
 				const t = props.t;
 				const directory = useDirectory(models, sessionId, directoryCache);
 				const state = useStoreSnapshot(absent(directory) ? null : directory.store);
-				const info = describeEffort(state);
+				const info = describeEffort(state, t);
 
 				const chipRef = useRef(null);
 				const railRef = useRef(null);
@@ -2087,7 +2101,9 @@ window.__ModuleLoader__.load({
 						result = directory.select({
 							provider: info.provider,
 							model: info.model,
-							reasoningEffort: levelId
+							/* Only the UI's default sentinel omits the property. An
+							   adapter's "off" (or any other opaque id) stays explicit. */
+							...levelId === null ? {} : { reasoningEffort: levelId }
 						});
 					} catch (error) {
 						clearTimeout(timer);

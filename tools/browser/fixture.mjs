@@ -20,7 +20,7 @@ const browser = await chromium.launch({ executablePath, headless: true });
 const results = [];
 const errors = [];
 
-async function fixture(effect = 'none', width = 1280, theme = 'light') {
+async function fixture(effect = 'none', width = 1280, theme = 'light', options = {}) {
   const page = await browser.newPage({ viewport: { width, height: 800 }, reducedMotion: 'reduce' });
   page.on('pageerror', error => errors.push(error.message));
   await page.setContent(`<!doctype html><html><head><meta charset="utf-8"><style>
@@ -37,13 +37,22 @@ async function fixture(effect = 'none', width = 1280, theme = 'light') {
     window.__ModuleLoader__ = { load: spec => { window.__bundle = spec; } };
   });
   await page.addScriptTag({ content: source });
-  await page.evaluate(() => {
-    const levels = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
+  await page.evaluate(options => {
+    const levels = options.levels || ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
+    const provider = options.provider || 'test';
+    const model = options.model || 'test-model';
+    const current = { provider, model, ...(options.initialEffort === null ? {} : { reasoningEffort:options.initialEffort || 'max' }) };
+    const reasoning = { efforts:levels.map(id => ({id,name:id[0].toUpperCase()+id.slice(1)})), ...(options.noDefault ? {} : { defaultEffort:options.defaultEffort || 'medium' }) };
     const listeners = new Set();
     window.__calls = [];
-    let snapshot = { current:{provider:'test',model:'test-model',reasoningEffort:'max'}, groups:[{id:'test',models:[{id:'test-model',name:'Test Model',reasoning:{efforts:levels.map(id => ({id,name:id[0].toUpperCase()+id.slice(1)})),defaultEffort:'medium'}}]}], status:'ready',error:null };
-    window.fetch = async () => ({ ok:true, json:async () => ({ ok:true,state:'native',levels }) });
-    const directory = { available:true, load:async () => {}, store:{getSnapshot:() => snapshot,subscribe:listener => {listeners.add(listener);return () => listeners.delete(listener);}}, select:async selection => {window.__calls.push(selection);snapshot={...snapshot,current:selection};listeners.forEach(fn => fn());return {ok:true};} };
+    let snapshot = { current, groups:[{id:provider,models:[{id:model,name:'Test Model',...(options.noReasoning ? {} : {reasoning})}]}], status:'ready',error:null };
+    window.fetch = async () => ({ ok:true, json:async () => ({ ok:true,state:'native',levels:options.noReasoning ? [] : levels }) });
+    // Match the core contract: only adapter-owned IDs, or an omitted effort.
+    const directory = { available:true, load:async () => {}, store:{getSnapshot:() => snapshot,subscribe:listener => {listeners.add(listener);return () => listeners.delete(listener);}}, select:async selection => {
+      window.__calls.push(selection);
+      if(Object.hasOwn(selection,'reasoningEffort') && (options.noReasoning || !levels.includes(selection.reasoningEffort))) return {ok:false};
+      snapshot={...snapshot,current:selection,retainedEffort:'High'};listeners.forEach(fn => fn());return {ok:true};
+    } };
     const bundle = window.__bundle.factory(name => {
       if(name === 'react') return window.React;
       if(name === 'react-dom') return window.ReactDOM;
@@ -54,8 +63,8 @@ async function fixture(effect = 'none', width = 1280, theme = 'light') {
     const scope = { modelDirectories:{directoryFor:() => directory}, slots:{inject:(_name,callback) => callback(),register:(_options,component) => {Control=component;return () => {}; }}, locale:{register:(_name,dict) => {dictionary=dict;return () => {}; }}, effect:fn => {const dispose=fn();if(typeof dispose === 'function')window.__disposers.push(dispose);} };
     bundle.apply({...scope,inject:(_services,callback) => callback(scope)});
     window.__root=window.ReactDOM.createRoot(document.getElementById('mount'));
-    window.__root.render(window.React.createElement(Control,{sessionId:'fixture',t:key => dictionary.en[key] || key}));
-  });
+    window.__root.render(window.React.createElement(Control,{sessionId:'fixture',t:key => dictionary[options.locale || 'en'][key] || key}));
+  }, options);
   await page.locator('[data-te-chip]').waitFor({ state:'visible' });
   return page;
 }
@@ -148,6 +157,91 @@ try {
       await page.evaluate(() => {window.__root.unmount();window.__disposers.forEach(fn => fn());});
       assert.equal(await page.locator('[data-te-panel]').count(),0);
       return {requests:1,unmounted:true};
+    } finally {await page.close();}
+  });
+  // Hy4 publishes High only. Provider default is a separate, omitted-effort
+  // choice, not a fabricated Low/Medium level or an explicit Off value.
+  for(const model of ['homelab/workbuddy/hy4free','homelab/workbuddy-ai/hy4free']) {
+    await test(`${model}: default and High switch with keyboard and pointer`,async () => {
+      const page=await fixture('will-change',1280,'light',{provider:'magpie',model,levels:['high'],initialEffort:'high',noDefault:true});
+      try {
+        await open(page);
+        const slider=page.locator('[role="slider"]');
+        assert.equal(await slider.getAttribute('aria-valuemax'),'2');
+        assert.equal(await page.locator('.te-tick').count(),2,'only default and the actually offered High');
+        await slider.press('Home');
+        await page.waitForFunction(() => document.querySelector('[data-te-chip]').textContent==='Provider default');
+        assert.deepEqual(await page.evaluate(() => window.__calls[0]),{provider:'magpie',model});
+        await slider.press('Home');
+        assert.equal(await page.evaluate(() => window.__calls.length),1,'active default is a no-op');
+        await slider.press('End');
+        await page.waitForFunction(() => document.querySelector('[data-te-chip]').textContent==='High');
+        assert.deepEqual(await page.evaluate(() => window.__calls[1]),{provider:'magpie',model,reasoningEffort:'high'});
+        const rail=await page.locator('.te-rail').boundingBox();
+        await page.mouse.click(rail.x+13,rail.y+rail.height/2);
+        await page.waitForFunction(() => document.querySelector('[data-te-chip]').textContent==='Provider default');
+        assert.deepEqual(await page.evaluate(() => window.__calls[2]),{provider:'magpie',model});
+        if(model.includes('workbuddy/')) {
+          const panel=await page.locator('[data-te-panel]').boundingBox();
+          mkdirSync(dirname(reportPath),{recursive:true});
+          await page.screenshot({path:reportPath.replace(/\.json$/,'-hy4-default.png'),clip:{x:panel.x-8,y:panel.y-8,width:panel.width+16,height:panel.height+72}});
+        }
+        await page.mouse.click(rail.x+rail.width-13,rail.y+rail.height/2);
+        await page.waitForFunction(() => document.querySelector('[data-te-chip]').textContent==='High');
+        assert.deepEqual(await page.evaluate(() => window.__calls[3]),{provider:'magpie',model,reasoningEffort:'high'});
+        return {choices:['provider default','high'],requests:await page.evaluate(() => window.__calls)};
+      } finally {await page.close();}
+    });
+  }
+  await test('provider default and an explicit Off level stay distinct',async () => {
+    const page=await fixture('none',1280,'light',{levels:['off','high'],initialEffort:'high',noDefault:true});
+    try {
+      await open(page);
+      const slider=page.locator('[role="slider"]');
+      assert.equal(await slider.getAttribute('aria-valuemax'),'3');
+      await slider.press('Home');
+      await page.waitForFunction(() => window.__calls.length===1);
+      assert.equal(await page.evaluate(() => Object.hasOwn(window.__calls[0],'reasoningEffort')),false);
+      await slider.press('ArrowRight');
+      await page.waitForFunction(() => window.__calls.length===2);
+      assert.equal(await page.evaluate(() => window.__calls[1].reasoningEffort),'off');
+      assert.equal(await page.locator('[data-te-chip]').textContent(),'Off');
+      return {requests:await page.evaluate(() => window.__calls)};
+    } finally {await page.close();}
+  });
+  await test('an adapter-configured default is not duplicated',async () => {
+    const page=await fixture('none',1280,'light',{levels:['high'],initialEffort:null,defaultEffort:'high'});
+    try {await open(page);assert.equal(await page.locator('[role="slider"]').getAttribute('aria-valuemax'),'1');assert.equal(await page.locator('[data-te-chip]').textContent(),'High');}
+    finally {await page.close();}
+  });
+  await test('opaque generic IDs work without a declaration writer',async () => {
+    const page=await fixture('none',1280,'light',{provider:'generic',levels:['fast-mode','deep-mode'],initialEffort:null,noDefault:true});
+    try {
+      await open(page);
+      const slider=page.locator('[role="slider"]');
+      assert.equal(await slider.getAttribute('aria-valuemax'),'3');
+      await slider.press('End');
+      await page.waitForFunction(() => window.__calls.length===1);
+      assert.equal(await page.evaluate(() => window.__calls[0].reasoningEffort),'deep-mode');
+      await slider.press('Home');
+      await page.waitForFunction(() => window.__calls.length===2);
+      assert.equal(await page.evaluate(() => Object.hasOwn(window.__calls[1],'reasoningEffort')),false);
+    } finally {await page.close();}
+  });
+  await test('provider-default labels follow the Chinese locale',async () => {
+    const page=await fixture('none',1280,'light',{levels:['high'],initialEffort:null,noDefault:true,locale:'zh'});
+    try {await open(page);assert.equal(await page.locator('[data-te-chip]').textContent(),'模型默认');assert.ok((await page.locator('[role="slider"]').getAttribute('aria-valuetext')).startsWith('模型默认'));}
+    finally {await page.close();}
+  });
+  await test('models without reasoning still have an inert preview',async () => {
+    const page=await fixture('none',1280,'light',{initialEffort:null,noReasoning:true});
+    try {
+      await page.locator('[data-te-chip]').click();
+      await page.locator('[data-te-panel]').waitFor({state:'visible'});
+      assert.equal(await page.locator('[role="slider"]').count(),0);
+      assert.equal(await page.locator('.te-tick').count(),5);
+      await page.locator('.te-rail').click();
+      assert.deepEqual(await page.evaluate(() => window.__calls),[]);
     } finally {await page.close();}
   });
   await test('no uncaught browser errors',async () => {assert.deepEqual(errors,[]);});

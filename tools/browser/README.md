@@ -1,4 +1,4 @@
-# 浏览器定位回归
+# 浏览器布局与推理强度回归
 
 本目录的依赖仅用于测试，不属于插件运行依赖，也不会给 Harness 页面打包第二份 React。
 
@@ -21,6 +21,8 @@ pnpm test:browser
 - 明暗主题、240px 窄视口、内部滚动、窗口 resize。
 - 实际面板矩形与视口坐标一致，且面板属于 document body 的 Portal。
 - 键盘换档、Escape 归还焦点、外部点击关闭、React 卸载无孤儿面板。
+- 两条 hy4 路由只提供 High 时，「模型默认 ↔ High」的 Home / End 和真实指针点击；请求中默认值必须省略 `reasoningEffort`，而非发送 `null`、Off 或虚构档位。
+- 模型默认与显式 Off 分离；已有默认档位不重复；任意适配器原生 ID、中英文默认标签、无推理元数据的不可交互预览。
 
 输出的 JSON 和截图默认写入被忽略的 `.verification/`；用 `--report <path>` 改位置。`--source <path>` 可测试另一份 bundle；`--before` 只用于确认原版确实复现偏移，**不表示原版已通过修复后的定位断言**。
 

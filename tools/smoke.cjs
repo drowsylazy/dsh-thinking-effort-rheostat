@@ -591,6 +591,98 @@ check('a single declared level draws a real rail',
 oneLevel.dispose();
 
 /* ------------------------------------------------------------------ *
+ * Hy4: one explicit level still has the native provider-default choice.
+ * The two IDs and the single High level mirror the local /v1/models feed.
+ * Neither fixture declares invented Low/Medium levels or edits a profile.
+ * ------------------------------------------------------------------ */
+for (const model of ['homelab/workbuddy/hy4free', 'homelab/workbuddy-ai/hy4free']) {
+  selectCalls.length = 0;
+  const high = { id: 'high', name: 'High' };
+  currentState = stateWith({
+    current: { provider: 'magpie', model, reasoningEffort: 'high' },
+    groups: [{ id: 'magpie', models: [{ id: model, name: 'Hy4', reasoning: { efforts: [high] } }] }]
+  });
+  const hy4 = mountControl();
+  tree = openIt(hy4);
+  check(model + ': default and High form two selectable stops',
+    first(tree, 'te-thumb').props['aria-valuemax'] === 2 && findAll(tree, byClass('te-tick')).length === 2);
+  first(tree, 'te-thumb').props.onKeyDown({ key: 'Home', preventDefault() {} });
+  const cleared = selectCalls[0];
+  check(model + ': Home selects the same model without a reasoningEffort property',
+    cleared !== void 0 && cleared.provider === 'magpie' && cleared.model === model &&
+    !Object.hasOwn(cleared, 'reasoningEffort'), JSON.stringify(selectCalls));
+  if (cleared !== void 0) currentState = { ...currentState, current: cleared, retainedEffort: 'High' };
+  tree = hy4.draw();
+  check(model + ': a confirmed default ignores a retained High label',
+    chipLabel(tree).endsWith(t('effort.providerDefault')) && first(tree, 'te-thumb').props['aria-valuenow'] === 1,
+    chipLabel(tree));
+  const beforeRepeat = selectCalls.length;
+  first(tree, 'te-thumb').props.onKeyDown({ key: 'Home', preventDefault() {} });
+  check(model + ': choosing an already active default is a no-op', selectCalls.length === beforeRepeat);
+  first(tree, 'te-thumb').props.onKeyDown({ key: 'End', preventDefault() {} });
+  const raised = selectCalls.at(-1);
+  check(model + ': End restores the actual adapter-owned High level',
+    selectCalls.length === beforeRepeat + 1 && raised?.reasoningEffort === 'high' && raised.model === model,
+    JSON.stringify(selectCalls));
+  if (raised !== void 0) currentState = { ...currentState, current: raised };
+  tree = hy4.draw();
+  const rail = first(tree, 'te-rail');
+  rail.props.onPointerDown({ clientX: RAIL_LEFT + RAIL_PAD, pointerId: 71, currentTarget: rail.props.ref.current, preventDefault() {} });
+  rail.props.onPointerUp();
+  check(model + ': clicking the first stop also clears the explicit effort',
+    selectCalls.length === beforeRepeat + 2 && !Object.hasOwn(selectCalls.at(-1), 'reasoningEffort'),
+    JSON.stringify(selectCalls));
+  hy4.dispose();
+}
+
+/* Provider default is an omitted field, NOT an adapter's explicit Off ID. */
+selectCalls.length = 0;
+currentState = stateWith({
+  current: { provider: 'p', model: 'm-off', reasoningEffort: 'high' },
+  groups: [{ id: 'p', models: [{ id: 'm-off', name: 'Off and High', reasoning: {
+    efforts: [{ id: 'off', name: 'Off' }, { id: 'high', name: 'High' }]
+  } }] }]
+});
+const offAndDefault = mountControl();
+tree = openIt(offAndDefault);
+check('an explicit Off level remains separate from provider default', first(tree, 'te-thumb').props['aria-valuemax'] === 3);
+first(tree, 'te-thumb').props.onKeyDown({ key: 'Home', preventDefault() {} });
+check('provider default sends neither Off nor a synthetic default ID',
+  selectCalls.length === 1 && !Object.hasOwn(selectCalls[0], 'reasoningEffort'), JSON.stringify(selectCalls));
+if (selectCalls[0] !== void 0) currentState = { ...currentState, current: selectCalls[0] };
+tree = offAndDefault.draw();
+first(tree, 'te-thumb').props.onKeyDown({ key: 'ArrowRight', preventDefault() {} });
+check('the next stop still sends the adapter-owned Off ID', selectCalls.at(-1)?.reasoningEffort === 'off', JSON.stringify(selectCalls));
+offAndDefault.dispose();
+
+currentState = stateWith({
+  current: { provider: 'generic', model: 'custom' },
+  groups: [{ id: 'generic', models: [{ id: 'custom', name: 'Custom IDs', reasoning: {
+    efforts: [{ id: 'fast-mode', name: 'Fast' }, { id: 'deep-mode', name: 'Deep' }]
+  } }] }]
+});
+const genericDefault = mountControl();
+tree = openIt(genericDefault);
+check('generic adapter-owned IDs also retain the default stop', first(tree, 'te-thumb').props['aria-valuemax'] === 3);
+selectCalls.length = 0;
+first(tree, 'te-thumb').props.onKeyDown({ key: 'End', preventDefault() {} });
+check('generic effort IDs are not rewritten into pi-ai vocabulary', selectCalls[0]?.reasoningEffort === 'deep-mode');
+genericDefault.dispose();
+
+currentState = stateWith({
+  current: { provider: 'p', model: 'm-fixed' },
+  groups: [{ id: 'p', models: [{ id: 'm-fixed', name: 'Fixed default', reasoning: {
+    efforts: [{ id: 'high', name: 'High' }], defaultEffort: 'high'
+  } }] }]
+});
+const fixedDefault = mountControl();
+tree = openIt(fixedDefault);
+check('an adapter with a configured default gets no duplicate default stop',
+  first(tree, 'te-thumb').props['aria-valuemax'] === 1 && chipLabel(tree).endsWith('High'));
+fixedDefault.dispose();
+selectCalls.length = 0;
+
+/* ------------------------------------------------------------------ *
  * A model that declares six levels
  * ------------------------------------------------------------------ */
 const sixGroups = [{
